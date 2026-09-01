@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "FluentEmojiKitchen (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "FluentEmojiKitchen (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
