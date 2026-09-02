@@ -1,5 +1,7 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using System;
+using System.IO;
 
 namespace FluentEmojiKitchen
 {
@@ -12,6 +14,7 @@ namespace FluentEmojiKitchen
             this.InitializeComponent();
             AppWindow.Closing += OnAppWindowClosing;
             AppWindow.Changed += OnAppWindowFocus;
+            SetAppIcon();
             
         }
 
@@ -45,6 +48,16 @@ namespace FluentEmojiKitchen
             }
 
             _isPopupVisible = !_isPopupVisible;
+        }
+        private void SetAppIcon()
+        {
+            string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets/AppIcon.ico");
+
+            if (File.Exists(iconPath))
+            {
+                // Apply the icon to the AppWindow instance
+                this.AppWindow.SetIcon(iconPath);
+            }
         }
     }
 }
