@@ -8,24 +8,24 @@ namespace FluentEmojiKitchen
     {
         private MainWindow? _window;
         private TrayIconService? _trayIconService;
-        private HotkeyRegistryService? _hotkeyRegistryService;
+        private GlobalHotkeyService? _globalHotkeyService;
 
         public App() => InitializeComponent();
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            _hotkeyRegistryService = new HotkeyRegistryService();
-            _hotkeyRegistryService.RecoverFromCrashIfNeeded();
-            _hotkeyRegistryService.DisableOsHotkey();
+            _globalHotkeyService = new GlobalHotkeyService();
+            _globalHotkeyService.HotkeyPressed += TogglePopup;
+            _globalHotkeyService.Install();
 
             // try to restore prev. registry values if app crashes or something.
-            AppDomain.CurrentDomain.ProcessExit += (_, _) => _hotkeyRegistryService.RestoreOsHotkey();
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => _globalHotkeyService?.Dispose();
 
             _trayIconService = new TrayIconService();
             _trayIconService.ToggleRequested += TogglePopup;
             _trayIconService.ExitRequested += () =>
             {
-                _hotkeyRegistryService.RestoreOsHotkey();
+                _globalHotkeyService.Dispose();
                 _trayIconService?.Dispose();
                 Environment.Exit(0);
             };
