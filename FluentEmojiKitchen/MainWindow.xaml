@@ -42,22 +42,41 @@
                 <StackPanel Padding="12,0,12,12" Spacing="8">
                     <TextBlock Text="Recent" FontSize="14" FontWeight="SemiBold" />
 
-                    <StackPanel Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center">
-                        <TextBlock Text="🍑" FontFamily="Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji" FontSize="28" />
-                        <TextBlock Text="💦" FontFamily="Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji" FontSize="28" />
-                        <TextBlock Text="🍆" FontFamily="Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji" FontSize="28" />
-                        <TextBlock Text="🥲" FontFamily="Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji" FontSize="28" />
-                        <TextBlock Text="🐐" FontFamily="Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji" FontSize="28" />
-                        <TextBlock Text="🔥" FontFamily="Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji" FontSize="28" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center">
-                        <TextBlock Text="🤣" FontFamily="Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji" FontSize="28" />
-                        <TextBlock Text="🥺" FontFamily="Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji" FontSize="28" />
-                        <TextBlock Text="😔" FontFamily="Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji" FontSize="28" />
-                        <TextBlock Text="🥹" FontFamily="Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji" FontSize="28" />
-                        <TextBlock Text="😂" FontFamily="Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji" FontSize="28" />
-                        <TextBlock Text="🐔" FontFamily="Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji" FontSize="28" />
-                    </StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="🍑" FontFamily="Noto Color Emoji" FontSize="28" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="💦" FontFamily="Noto Color Emoji" FontSize="28" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="🍆" FontFamily="Noto Color Emoji" FontSize="28" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Column="3" Text="🥲" FontFamily="Noto Color Emoji" FontSize="28" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Column="4" Text="🐐" FontFamily="Noto Color Emoji" FontSize="28" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Column="5" Text="🔥" FontFamily="Noto Color Emoji" FontSize="28" HorizontalAlignment="Center" />
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="🤣" FontFamily="Noto Color Emoji" FontSize="28" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="🥺" FontFamily="Noto Color Emoji" FontSize="28" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="😔" FontFamily="Noto Color Emoji" FontSize="28" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Column="3" Text="🥹" FontFamily="Noto Color Emoji" FontSize="28" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Column="4" Text="😂" FontFamily="Noto Color Emoji" FontSize="28" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Column="5" Text="&#x1FAEA;" FontFamily="Noto Color Emoji" FontSize="28" HorizontalAlignment="Center" />
+                    </Grid>
                 </StackPanel>
             </ScrollViewer>
 
