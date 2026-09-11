@@ -29,18 +29,13 @@ namespace FluentEmojiKitchen
                 _trayIconService?.Dispose();
                 Environment.Exit(0);
             };
+
+            _window = new MainWindow();
         }
 
         private void TogglePopup()
         {
-            if (_window is null)
-            {
-                _window = new MainWindow();
-                _window.Activate();
-                return;
-            }
-
-            _window.TogglePopupVisibility();
+            _window!.TogglePopupVisibility();
         }
     }
 }

@@ -14,7 +14,7 @@ namespace FluentEmojiKitchen.Services
         {
             _icon = new TaskbarIcon
             {
-                IconSource = new BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico")),
+                IconSource = new BitmapImage(new Uri("ms-appx:///Assets/Icons/AppIcon.ico")),
                 ToolTipText = "Fluent Emoji Kitchen"
             };
             _icon.ForceCreate();
