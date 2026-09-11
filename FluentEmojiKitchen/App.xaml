@@ -6,6 +6,7 @@
     xmlns:local="using:FluentEmojiKitchen">
     <Application.Resources>
         <ResourceDictionary>
+            <FontFamily x:Key="NotoColorEmoji">ms-appx:///Assets/Fonts/NotoColorEmoji.ttf#Noto Color Emoji</FontFamily>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <!-- Other merged dictionaries here -->

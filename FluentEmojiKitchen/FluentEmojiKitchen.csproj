@@ -17,7 +17,7 @@
 	<ApplicationIcon>Assets\Icons\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <Content Remove="Assets\Fonts\NotoColorEmoji.ttf" />
+    <None Remove="Assets\Fonts\NotoColorEmoji.ttf" />
   </ItemGroup>
   <ItemGroup>
     <Page Remove="views\MainWindow.xaml" />
@@ -42,6 +42,11 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Models\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Update="Assets\Fonts\NotoColorEmoji.ttf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <None Update="Views\MainWindow.xaml">
