@@ -1,3 +1,4 @@
+using FluentEmojiKitchen.Models;
 using FluentEmojiKitchen.Services;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -152,8 +153,16 @@ namespace FluentEmojiKitchen
             EmojiTabContent.Visibility = Visibility.Visible;
 
             EmojiRepeater.ItemsSource = emojiDataService.Emojis
-                .Select(e => new Models.EmojiItemViewModel(e))
+                .Where(IsBaseVariant)
+                .Select(e => new EmojiItemViewModel(e))
                 .ToList();
+        }
+
+        private static bool IsBaseVariant(EmojiModel emoji)
+        {
+            // Fitzpatrick skin-tone modifiers occupy this exact codepoint range.
+            // Any emoji containing one is a toned variant of some other base entry.
+            return !emoji.Codepoints.Any(cp => cp is >= 0x1F3FB and <= 0x1F3FF);
         }
 
         private void OnEmojiPointerEntered(object sender, PointerRoutedEventArgs e)
