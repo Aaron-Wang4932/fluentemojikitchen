@@ -17,6 +17,9 @@
 	<ApplicationIcon>Assets\Icons\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <Content Remove="Assets\Fonts\seguiemj.ttf" />
+  </ItemGroup>
+  <ItemGroup>
     <None Remove="Assets\Fonts\NotoColorEmoji.ttf" />
   </ItemGroup>
   <ItemGroup>
@@ -39,9 +42,6 @@
     <PackageReference Include="H.NotifyIcon.WinUI" Version="2.4.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Models\" />
   </ItemGroup>
   <ItemGroup>
     <Content Update="Assets\Fonts\NotoColorEmoji.ttf">

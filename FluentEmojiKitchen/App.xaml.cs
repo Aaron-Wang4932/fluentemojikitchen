@@ -1,8 +1,7 @@
 ﻿using FluentEmojiKitchen.Services;
 using Microsoft.UI.Xaml;
 using System;
-using System.Runtime.InteropServices;
-using System.IO;
+using System.Threading.Tasks;
 
 namespace FluentEmojiKitchen
 {
@@ -11,19 +10,21 @@ namespace FluentEmojiKitchen
         private MainWindow? _window;
         private TrayIconService? _trayIconService;
         private GlobalHotkeyService? _globalHotkeyService;
-        private const uint FR_PRIVATE = 0x10;
 
-        public App() => InitializeComponent();
+        public App() 
+        {
+            // to fix issue where devices with non-functional ipv6 address will wait for download to time out before trying ipv4
+            AppContext.SetSwitch("System.Net.DisableIPv6", true); 
+            InitializeComponent(); 
+        }
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            RegisterEmojiFont();
-
             _globalHotkeyService = new GlobalHotkeyService();
             _globalHotkeyService.HotkeyPressed += TogglePopup;
             _globalHotkeyService.Install();
 
-            // try to restore prev. registry values if app crashes or something.
+            // try to remove the win+. keybind hook if app crashes or something.
             AppDomain.CurrentDomain.ProcessExit += (_, _) => _globalHotkeyService?.Dispose();
 
             _trayIconService = new TrayIconService();
@@ -36,6 +37,7 @@ namespace FluentEmojiKitchen
             };
 
             _window = new MainWindow();
+            _ = InitAsync();
         }
 
         private void TogglePopup()
@@ -43,15 +45,16 @@ namespace FluentEmojiKitchen
             _window!.TogglePopupVisibility();
         }
 
-        [DllImport("gdi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern int AddFontResourceEx(string lpszFilename, uint fl, IntPtr pdv);
-
-        private static void RegisterEmojiFont()
+        private async Task InitAsync()
         {
-            string fontPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "NotoColorEmoji.ttf");
-            if (File.Exists(fontPath))
+            try
             {
-                AddFontResourceEx(fontPath, FR_PRIVATE, IntPtr.Zero);
+                var emojiDataService = await EmojiDataService.CreateAsync();
+                _window!.SetEmojiData(emojiDataService);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Emoji data initialization failed: {ex}");
             }
         }
     }

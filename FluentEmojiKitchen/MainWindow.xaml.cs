@@ -1,17 +1,38 @@
+using FluentEmojiKitchen.Services;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-using System.Runtime.InteropServices;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 
 namespace FluentEmojiKitchen
 {
     public sealed partial class MainWindow : Window
     {
-        private bool _isPopupVisible = false; // initially the window is not visible.
+        // ===== Fields =====
+
+        // Initial state upon loading: window not visible.
+        private bool _isPopupVisible = false;
+
         // Calling AppWindow.Show()/Hide() can itself trigger Activated event handler while TogglePopupVisibility is still running.
         // We set a flag to indicate that we are still in the midst of changing states.
         private bool _isProgrammaticToggle;
+
+        private Models.EmojiItemViewModel? _selectedEmoji;
+        private IntPtr _previousForegroundWindow;
+
+        // Queued emoji characters awaiting insertion into the previously-focused app.
+        // Rapid clicks enqueue instantly; a single background loop drains them one at
+        // a time so overlapping SetForegroundWindow/InsertText calls can't race each other.
+        private readonly Queue<string> _pendingInserts = new();
+        private bool _isProcessingInsertQueue;
+
+        // ===== Construction / window setup =====
 
         public MainWindow()
         {
@@ -35,11 +56,28 @@ namespace FluentEmojiKitchen
             }
 
             AppWindow.Resize(new Windows.Graphics.SizeInt32(360, 420));
+            AppWindow.IsShownInSwitchers = false; // hide from Alt+Tab
+
+            // Hide from the taskbar itself
+            IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+            exStyle |= WS_EX_TOOLWINDOW;
+            exStyle &= ~WS_EX_APPWINDOW;
+            SetWindowLong(hWnd, GWL_EXSTYLE, exStyle);
 
             AppWindow.Closing += OnAppWindowClosing;
             this.Activated += OnWindowActivated;
             SetAppIcon();
         }
+
+        private void SetAppIcon()
+        {
+            string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets/Icons/AppIcon.ico");
+            if (File.Exists(iconPath))
+                this.AppWindow.SetIcon(iconPath);
+        }
+
+        // ===== Show / hide lifecycle =====
 
         private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
         {
@@ -62,10 +100,11 @@ namespace FluentEmojiKitchen
         {
             _isProgrammaticToggle = true;
 
-            if (_isPopupVisible) 
+            if (_isPopupVisible)
                 AppWindow.Hide();
             else
             {
+                _previousForegroundWindow = GetForegroundWindow();
                 SetAllFocus();
                 AppWindow.Show();
             }
@@ -87,12 +126,7 @@ namespace FluentEmojiKitchen
             DispatcherQueue.TryEnqueue(() => SearchBox.Focus(FocusState.Programmatic));
         }
 
-        private void SetAppIcon()
-        {
-            string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets/Icons/AppIcon.ico");
-            if (File.Exists(iconPath))
-                this.AppWindow.SetIcon(iconPath);
-        }
+        // ===== Tab switching =====
 
         private void OnEmojiTabClick(object sender, RoutedEventArgs e)
         {
@@ -110,8 +144,97 @@ namespace FluentEmojiKitchen
             KitchenTabContent.Visibility = Visibility.Visible;
         }
 
+        // ===== Emoji grid: data + hover visuals =====
+
+        public void SetEmojiData(EmojiDataService emojiDataService)
+        {
+            LoadingText.Visibility = Visibility.Collapsed;
+            EmojiTabContent.Visibility = Visibility.Visible;
+
+            EmojiRepeater.ItemsSource = emojiDataService.Emojis
+                .Select(e => new Models.EmojiItemViewModel(e))
+                .ToList();
+        }
+
+        private void OnEmojiPointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is FrameworkElement root && root.FindName("HoverLayer") is Border hover)
+                hover.Opacity = 1;
+        }
+
+        private void OnEmojiPointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is FrameworkElement root && root.FindName("HoverLayer") is Border hover)
+                hover.Opacity = 0;
+        }
+
+        // ===== Emoji click -> insertion queue =====
+
+        private void OnEmojiItemClick(object sender, TappedRoutedEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine("click detected");
+            if (sender is FrameworkElement { Tag: Models.EmojiItemViewModel vm })
+            {
+                if (_selectedEmoji != vm && _selectedEmoji is not null)
+                {
+                    _selectedEmoji.IsSelected = false;
+                }
+                vm.IsSelected = true;
+                _selectedEmoji = vm;
+
+                // e.g. copy to clipboard
+                //var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
+                //dataPackage.SetText(vm.Character);
+                //Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
+                System.Diagnostics.Debug.WriteLine(vm.Character);
+
+                _pendingInserts.Enqueue(vm.Character);
+                if (!_isProcessingInsertQueue)
+                    _ = ProcessInsertQueueAsync();
+            }
+        }
+
+        private async Task ProcessInsertQueueAsync()
+        {
+            _isProcessingInsertQueue = true;
+            _isProgrammaticToggle = true;
+
+            // Foreground the target once for the whole batch, not once per emoji —
+            // repeated redundant foregrounding mid-batch is itself a plausible source
+            // of interrupting the target's in-progress composition.
+            SetForegroundWindow(_previousForegroundWindow);
+            await Task.Delay(60);
+
+            while (_pendingInserts.Count > 0)
+            {
+                string character = _pendingInserts.Dequeue();
+                EmojiInsertionService.InsertText(character);
+
+                // Give the target's text/composition layer time to fully finish
+                // reassembling this emoji before the next one's keystrokes arrive.
+                await Task.Delay(40);
+            }
+
+            _isProcessingInsertQueue = false;
+            DispatcherQueue.TryEnqueue(() => _isProgrammaticToggle = false);
+        }
+
+        // ===== Win32 interop =====
+
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+        private const int WS_EX_APPWINDOW = 0x00040000;
 
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll")]
+        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
     }
 }
