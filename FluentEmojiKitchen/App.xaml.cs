@@ -50,7 +50,7 @@ namespace FluentEmojiKitchen
             try
             {
                 var emojiDataService = await EmojiDataService.CreateAsync();
-                _window!.SetEmojiData(emojiDataService);
+                await _window!.SetEmojiData(emojiDataService);
             }
             catch (Exception ex)
             {

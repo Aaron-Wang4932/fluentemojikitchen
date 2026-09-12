@@ -26,7 +26,7 @@ namespace FluentEmojiKitchen.Services
             }
         }
 
-        private static INPUT CreateUnicodeInput(char c, bool keyUp) => new INPUT
+        private static INPUT CreateUnicodeInput(char c, bool keyUp) => new()
         {
             type = INPUT_KEYBOARD,
             U = new InputUnion

@@ -80,6 +80,11 @@ namespace FluentEmojiKitchen.Services
                         .Split(" ", StringSplitOptions.RemoveEmptyEntries)
                         .Select(s => int.Parse(s, System.Globalization.NumberStyles.HexNumber))
                         .ToList();
+
+                    // Skip adding all the country flags.
+                    if (IsCountryFlag(codepoints))
+                        continue;
+
                     string[] nameInfo = semicolonSplit[1].Trim().Split(" ", StringSplitOptions.RemoveEmptyEntries);
                     string emoji = string.Concat(codepoints.Select(char.ConvertFromUtf32));
                     string name = string.Join(" ", nameInfo, 3, nameInfo.Length - 3);
@@ -88,9 +93,26 @@ namespace FluentEmojiKitchen.Services
                     emojis.Add(emojiModel);
                 } 
             }
+
+            // Add regional indicators
+            for (int i = 0; i < 26; i++)
+            {
+                int codepoint = 0x1F1E6 + i;
+                char letter = (char)('A' + i);
+                emojis.Add(new EmojiModel(
+                    char.ConvertFromUtf32(codepoint),
+                    new List<int> { codepoint },
+                    $"Flag Selector {letter}",
+                    "Flags",
+                    "regional-indicator"));
+            }
+
             string jsonString = JsonSerializer.Serialize(emojis);
             File.WriteAllText(ParsedEmojiJSON, jsonString);
             //System.Diagnostics.Debug.WriteLine("finished json serializing");
         }
+
+        private static bool IsCountryFlag(List<int> codepoints) =>
+            codepoints.Count == 2 && codepoints.All(cp => cp is >= 0x1F1E6 and <= 0x1F1FF);
     }
 }

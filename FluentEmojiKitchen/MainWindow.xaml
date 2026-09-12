@@ -39,64 +39,69 @@
 
         <!-- Content area -->
         <Grid Grid.Row="2">
-            <TextBlock x:Name="LoadingText" Text="Loading emoji..."
-               HorizontalAlignment="Center" VerticalAlignment="Center"
-               Opacity="0.6" />
 
             <!-- Emoji tab: dynamically bound to EmojiDataService.Emojis -->
             <ScrollViewer x:Name="EmojiTabContent"
-              Padding="8,0,8,12"
-              VerticalScrollBarVisibility="Auto"
-              HorizontalScrollBarVisibility="Disabled">
+      Padding="8,0,8,12"
+      VerticalScrollBarVisibility="Auto"
+      HorizontalScrollBarVisibility="Disabled">
                 <ItemsRepeater x:Name="EmojiRepeater">
                     <ItemsRepeater.Layout>
                         <UniformGridLayout MinItemWidth="48"
-                                MinItemHeight="48"
-                                ItemsStretch="Fill"
-                                MinRowSpacing="2"
-                                MinColumnSpacing="2" />
+                        MinItemHeight="48"
+                        ItemsStretch="Fill"
+                        MinRowSpacing="2"
+                        MinColumnSpacing="2" />
                     </ItemsRepeater.Layout>
 
                     <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="models:EmojiItemViewModel">
                             <Grid Width="48" Height="48"
-                                  Background="Transparent"
-                                  Tag="{x:Bind}"
-                                  PointerEntered="OnEmojiPointerEntered"
-                                  PointerExited="OnEmojiPointerExited"
-                                  Tapped="OnEmojiItemClick"
-                                  ToolTipService.ToolTip="{x:Bind EmojiName}">
+                          Background="Transparent"
+                          Tag="{x:Bind}"
+                          PointerEntered="OnEmojiPointerEntered"
+                          PointerExited="OnEmojiPointerExited"
+                          Tapped="OnEmojiItemClick"
+                          ToolTipService.ToolTip="{x:Bind EmojiName}">
 
-                                <!-- Hover fill: shown while pointer is over, regardless of selection -->
                                 <Border x:Name="HoverLayer"
-                                        CornerRadius="8"
-                                        Background="#55000000"
-                                        Opacity="0" />  
+                                CornerRadius="8"
+                                Background="#55000000"
+                                Opacity="0" />
 
-                                <!-- Selected outline: shown while IsSelected is true -->
                                 <Border x:Name="SelectedLayer"
-                                        CornerRadius="8"
-                                        BorderThickness="2"
-                                        BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
-                                        Opacity="{x:Bind SelectedOpacity, Mode=OneWay}" />          
+                                CornerRadius="8"
+                                BorderThickness="2"
+                                BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                                Opacity="{x:Bind SelectedOpacity, Mode=OneWay}" />
 
                                 <TextBlock Text="{x:Bind Character}"
-                                           FontFamily="Segoe UI Emoji"
-                                           FontSize="28"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           IsHitTestVisible="False" />
+                                   FontFamily="Segoe UI Emoji"
+                                   FontSize="28"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   IsHitTestVisible="False" />
                             </Grid>
                         </DataTemplate>
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>
             </ScrollViewer>
 
+            <!-- Loading overlay: opaque, drawn on top of the grid above (z-order, not
+         opacity) so the grid underneath is still genuinely painting/warming up
+         while this covers it. -->
+            <Grid x:Name="LoadingOverlay" Background="#2A2A2A">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                    <TextBlock Text="Precaching emojis..." Opacity="0.6" HorizontalAlignment="Center" />
+                    <ProgressBar x:Name="LoadingProgressBar" Width="200" Minimum="0" Maximum="100" Value="0" />
+                </StackPanel>
+            </Grid>
+
             <!-- Kitchen tab: placeholder, not functional yet -->
             <Grid x:Name="KitchenTabContent" Visibility="Collapsed">
                 <TextBlock Text="Emoji Kitchen — coming soon"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                           Opacity="0.6" />
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Opacity="0.6" />
             </Grid>
         </Grid>
     </Grid>
