@@ -5,6 +5,7 @@
   </PropertyGroup>
   <PropertyGroup>
     <ActiveDebugProfile>FluentEmojiKitchen (Unpackaged)</ActiveDebugProfile>
+    <_LastSelectedProfileId>C:\Users\peixi\source\repos\FluentEmojiKitchen\FluentEmojiKitchen\Properties\PublishProfiles\win-arm64.pubxml</_LastSelectedProfileId>
   </PropertyGroup>
   <ItemGroup>
     <None Update="App.xaml">

@@ -140,7 +140,7 @@ namespace FluentEmojiKitchen.Services
 
         private static async Task<Dictionary<string, List<string>>> LoadAnnotAsync()
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(CLDRAnnotations));
+            using var doc = JsonDocument.Parse(File.ReadAllText(CLDRAnnotations)); 
             var root = doc.RootElement.GetProperty("annotations").GetProperty("annotations");
 
             var res = new Dictionary<string, List<string>>();

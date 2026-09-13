@@ -31,8 +31,8 @@ namespace FluentEmojiKitchen
         private readonly Queue<string> _pendingInserts = new();
         private bool _isProcessingInsertQueue;
 
-        private bool doEmojiPrecaching = false;
-        private IReadOnlyList<EmojiModel> emojiList;
+        private bool doEmojiPrecaching = true;
+        private IReadOnlyList<EmojiModel>? emojiList;
 
         // ===== Construction / window setup =====
 
@@ -60,12 +60,14 @@ namespace FluentEmojiKitchen
             AppWindow.Resize(new Windows.Graphics.SizeInt32(360, 420));
             AppWindow.IsShownInSwitchers = false; // hide from Alt+Tab
 
-            // Hide from the taskbar itself
+            // Hide from the taskbar, AND prevent this window from ever taking activation.
             IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
-            exStyle |= WS_EX_TOOLWINDOW;
+            exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
             exStyle &= ~WS_EX_APPWINDOW;
             SetWindowLong(hWnd, GWL_EXSTYLE, exStyle);
+
+            // Make window non activating to never steal focus from previous foreground window.
 
             AppWindow.Closing += OnAppWindowClosing;
             this.Activated += OnWindowActivated;
@@ -103,13 +105,20 @@ namespace FluentEmojiKitchen
             _isProgrammaticToggle = true;
 
             if (_isPopupVisible)
+            {
                 AppWindow.Hide();
+                EmojiTabContent.ScrollTo(0, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled)); // scroll to top
+                EmojiPanelSearchBox.Text = string.Empty; // clear searchbar
+                _selectedEmoji?.IsSelected = false; // reset border on selected 
+            }
+                
             else
             {
+                // bringing back our emoji panel: remember prev. foreground window to keep track of where cursor was
                 _previousForegroundWindow = GetForegroundWindow();
                 SetAllFocus();
                 AppWindow.Show();
-                SearchBox.Text = string.Empty;
+
             }
 
             _isPopupVisible = !_isPopupVisible;
@@ -126,7 +135,7 @@ namespace FluentEmojiKitchen
             IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             SetForegroundWindow(hWnd);
             // Then, focus the emoji search bar.
-            DispatcherQueue.TryEnqueue(() => SearchBox.Focus(FocusState.Programmatic));
+            DispatcherQueue.TryEnqueue(() => EmojiPanelSearchBox.Focus(FocusState.Programmatic));
         }
 
         // ===== Tab switching =====
@@ -135,8 +144,11 @@ namespace FluentEmojiKitchen
         {
             EmojiTabButton.IsChecked = true;
             KitchenTabButton.IsChecked = false;
-            EmojiTabContent.Visibility = Visibility.Visible;
             KitchenTabContent.Visibility = Visibility.Collapsed;
+            EmojiPanelSearchBox.Visibility = Visibility.Visible;
+
+            // Restore whichever emoji view (grouped vs. flat search results) matches the search box's current text
+            UpdateEmojiView();
         }
 
         private void OnKitchenTabClick(object sender, RoutedEventArgs e)
@@ -144,7 +156,9 @@ namespace FluentEmojiKitchen
             EmojiTabButton.IsChecked = false;
             KitchenTabButton.IsChecked = true;
             EmojiTabContent.Visibility = Visibility.Collapsed;
+            SearchResultsContent.Visibility = Visibility.Collapsed;
             KitchenTabContent.Visibility = Visibility.Visible;
+            EmojiPanelSearchBox.Visibility = Visibility.Collapsed;
         }
 
         // ===== Emoji grid: data + hover visuals =====
@@ -154,12 +168,12 @@ namespace FluentEmojiKitchen
             // Keep "Loading emoji..." visible & EmojiTabContent transparent to allow for glyphs to precache
             EmojiTabContent.Visibility = Visibility.Visible;
 
-            EmojiRepeater.ItemsSource = emojiDataService.Emojis
-                .Where(e => !IsSkinToneVariant(e))
-                .Select(e => new Models.EmojiItemViewModel(e))
-                .ToList();
+            emojiList = emojiDataService.Emojis;
 
-            if(doEmojiPrecaching)
+            EmojiRepeater.ItemsSource = BuildSections(
+                emojiList.Where(e => !IsSkinToneVariant(e)));
+
+            if (doEmojiPrecaching)
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 await WarmUpEmojiGridAsync();
@@ -167,14 +181,37 @@ namespace FluentEmojiKitchen
             }
             LoadingProgressBar.Value = 100;
             LoadingOverlay.Visibility = Visibility.Collapsed;
+            EmojiPanelSearchBox.Visibility = Visibility.Visible;
 
-            System.Diagnostics.Debug.WriteLine(emojiDataService.Emojis.Count(e => !IsSkinToneVariant(e)) + " total emojis after filter.");
+            System.Diagnostics.Debug.WriteLine(emojiList.Count(e => !IsSkinToneVariant(e)) + " total emojis after filter.");
+        }
 
-            emojiList = emojiDataService.Emojis;
+        // Groups already-filtered emoji into sections by (Group, Subgroup), in the
+        // order they appear in the source list — which matches emoji-test.txt's own
+        // ordering, since the parsed list is never re-sorted.
+        private static List<EmojiSectionViewModel> BuildSections(IEnumerable<EmojiModel> emojis)
+        {
+            var sections = new List<EmojiSectionViewModel>();
+            string? lastGroup = null;
+
+            foreach (var g in emojis.GroupBy(e => (e.Group, e.Subgroup)))
+            {
+                bool isFirstInGroup = g.Key.Group != lastGroup;
+                lastGroup = g.Key.Group;
+
+                sections.Add(new EmojiSectionViewModel(
+                    g.Key.Group,
+                    g.Key.Subgroup,
+                    isFirstInGroup,
+                    g.Select(e => new Models.EmojiItemViewModel(e)).ToList()));
+            }
+
+            return sections;
         }
 
         private async Task WarmUpEmojiGridAsync()
         {
+            var scrollOptions = new ScrollingScrollOptions(ScrollingAnimationMode.Disabled);
             // Let one layout pass happen so ScrollableHeight is actually valid.
             await Task.Delay(50);
 
@@ -191,15 +228,15 @@ namespace FluentEmojiKitchen
             // Cannot immediately scroll from very top to very bottom since the glyphs in the middle would not get cached.
             for (double offset = 0; offset < maxOffset; offset += viewportHeight)
             {
-                EmojiTabContent.ChangeView(null, offset, null, disableAnimation: true);
+                EmojiTabContent.ScrollTo(EmojiTabContent.HorizontalOffset, offset, scrollOptions);
                 await Task.Delay(15);
 
                 curProgressBarTick++;
                 LoadingProgressBar.Value = (double)curProgressBarTick / totalProgressBarTicks * 100;
             }
 
-            EmojiTabContent.ChangeView(null, 0, null, disableAnimation: true);
-            await Task.Delay(15);
+            EmojiTabContent.ScrollTo(0, 0, scrollOptions);
+            await Task.Delay(400);
         }
 
         private static bool IsSkinToneVariant(EmojiModel emoji)
@@ -207,13 +244,6 @@ namespace FluentEmojiKitchen
             // Fitzpatrick skin-tone modifiers occupy this exact codepoint range.
             // Any emoji containing one is a toned variant of some other base entry.
             return emoji.Codepoints.Any(cp => cp is >= 0x1F3FB and <= 0x1F3FF);
-        }
-
-        private static bool IsGenderedVariation(EmojiModel emoji)
-        {
-            return emoji.Codepoints.Any(cp => (cp == 0x2642 || cp == 0x2640)) // gendered
-                && emoji.Codepoints.Contains(0x200D) // zero-width joiner
-                && emoji.Codepoints.Contains(0xFE0F); // variation selector
         }
 
         private void OnEmojiPointerEntered(object sender, PointerRoutedEventArgs e)
@@ -256,9 +286,7 @@ namespace FluentEmojiKitchen
             _isProcessingInsertQueue = true;
             _isProgrammaticToggle = true;
 
-            // Foreground the target once for the whole batch, not once per emoji —
-            // repeated redundant foregrounding mid-batch is itself a plausible source
-            // of interrupting the target's in-progress composition.
+            // Foreground the target once for the whole batch, not once per emoji
             SetForegroundWindow(_previousForegroundWindow);
             await Task.Delay(60);
 
@@ -271,24 +299,42 @@ namespace FluentEmojiKitchen
                 // reassembling this emoji before the next one's keystrokes arrive.
                 await Task.Delay(40);
             }
-
+            SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)); // give focus back to emoji panel so that we can do the whole "lose focus to turn off panel" thing
             _isProcessingInsertQueue = false;
             DispatcherQueue.TryEnqueue(() => _isProgrammaticToggle = false);
         }
 
         // ===== Search box =====
-        private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
-        {
-            string query = SearchBox.Text.Trim().ToLowerInvariant();
 
-            var filtered = emojiList.Where(emoji =>
+        private void OnSearchTextChanged(object sender, TextChangedEventArgs e) => UpdateEmojiView();
+
+        // Shows the grouped view when the search box is empty, or a flat filtered
+        // grid when it has text — called both on text change and when switching
+        // back to the Emoji tab, so the two stay in sync regardless of entry point.
+        private void UpdateEmojiView()
+        {
+            string query = EmojiPanelSearchBox.Text.Trim();
+
+            if (string.IsNullOrEmpty(query))
+            {
+                EmojiTabContent.Visibility = Visibility.Visible;
+                SearchResultsContent.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var filtered = emojiList!.Where(emoji =>
                 emoji.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                (emoji.Keywords?.Any(k => k.Contains(query, StringComparison.OrdinalIgnoreCase)) ?? false)
+                emoji.Group.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                emoji.Subgroup.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                (emoji.Keywords?.Any(k => k.Contains(query, StringComparison.OrdinalIgnoreCase)) ?? false) // match query, group, subgroup, keywords.
             ).ToList();
 
-            EmojiRepeater.ItemsSource = filtered
-                .Where(e => !IsSkinToneVariant(e))
+            SearchResultsRepeater.ItemsSource = filtered
+                .Where(e => !IsSkinToneVariant(e)) // again, filter out all the skin tones and convert each EmojiModel to the actual tiles on the grid.
                 .Select(e => new Models.EmojiItemViewModel(e)).ToList();
+
+            EmojiTabContent.Visibility = Visibility.Collapsed;
+            SearchResultsContent.Visibility = Visibility.Visible;
         }
 
         // ===== Win32 interop =====
@@ -296,6 +342,7 @@ namespace FluentEmojiKitchen
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
         private const int WS_EX_APPWINDOW = 0x00040000;
+        private const int WS_EX_NOACTIVATE = 0x08000000;
 
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);

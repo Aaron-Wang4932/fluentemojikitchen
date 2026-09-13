@@ -34,20 +34,89 @@
         </Grid>
 
         <!-- Search box -->
-        <TextBox x:Name="SearchBox" Grid.Row="1" Margin="12,0,12,8"
+        <TextBox x:Name="EmojiPanelSearchBox" Grid.Row="1" Margin="12,0,12,8"
                  PlaceholderText="Search emojis" CornerRadius="6"
                  TextChanged="OnSearchTextChanged"
-                 SelectionHighlightColor="DeepSkyBlue"/>
+                 SelectionHighlightColor="DeepSkyBlue"
+                 Visibility="Collapsed"/>
 
         <!-- Content area -->
         <Grid Grid.Row="2">
 
-            <!-- Emoji tab: dynamically bound to EmojiDataService.Emojis -->
-            <ScrollViewer x:Name="EmojiTabContent"
-      Padding="8,0,8,12"
-      VerticalScrollBarVisibility="Auto"
-      HorizontalScrollBarVisibility="Disabled">
+            <!-- Grouped view: shown when EmojiPanelSearchBox is empty -->
+            <ScrollView x:Name="EmojiTabContent"
+                  Padding="8,0,8,12"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Hidden">
                 <ItemsRepeater x:Name="EmojiRepeater">
+                    <ItemsRepeater.Layout>
+                        <StackLayout Orientation="Vertical" Spacing="4" />
+                    </ItemsRepeater.Layout>
+
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="models:EmojiSectionViewModel">
+                            <StackPanel Spacing="2" Margin="0,0,0,8">
+                                <TextBlock Text="{x:Bind GroupName}"
+                                           Visibility="{x:Bind GroupHeadingVisibility}"
+                                           FontSize="16" FontWeight="SemiBold"
+                                           Margin="0,8,0,2" />
+                                <TextBlock Text="{x:Bind SubgroupName}"
+                                           FontSize="12" Opacity="0.6"
+                                           Margin="0,0,0,4" />
+
+                                <ItemsRepeater ItemsSource="{x:Bind Emojis}">
+                                    <ItemsRepeater.Layout>
+                                        <UniformGridLayout MinItemWidth="48"
+                                        MinItemHeight="48"
+                                        ItemsStretch="Fill"
+                                        MinRowSpacing="2"
+                                        MinColumnSpacing="2" />
+                                    </ItemsRepeater.Layout>
+
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate x:DataType="models:EmojiItemViewModel">
+                                            <Grid Width="48" Height="48"
+                                          Background="Transparent"
+                                          Tag="{x:Bind}"
+                                          PointerEntered="OnEmojiPointerEntered"
+                                          PointerExited="OnEmojiPointerExited"
+                                          Tapped="OnEmojiItemClick"
+                                          ToolTipService.ToolTip="{x:Bind EmojiName}">
+
+                                                <Border x:Name="HoverLayer"
+                                                CornerRadius="8"
+                                                Background="#55000000"
+                                                Opacity="0" />
+
+                                                <Border x:Name="SelectedLayer"
+                                                CornerRadius="8"
+                                                BorderThickness="2"
+                                                BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                                                Opacity="{x:Bind SelectedOpacity, Mode=OneWay}" />
+
+                                                <TextBlock Text="{x:Bind Character}"
+                                                   FontFamily="{StaticResource NotoColorEmoji}"
+                                                   FontSize="28"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   IsHitTestVisible="False"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+            </ScrollView>
+
+            <!-- Flat search-results view: shown while EmojiPanelSearchBox has text -->
+            <ScrollViewer x:Name="SearchResultsContent"
+                  Padding="8,0,8,12"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  Visibility="Collapsed">
+                <ItemsRepeater x:Name="SearchResultsRepeater">
                     <ItemsRepeater.Layout>
                         <UniformGridLayout MinItemWidth="48"
                         MinItemHeight="48"
@@ -89,9 +158,7 @@
                 </ItemsRepeater>
             </ScrollViewer>
 
-            <!-- Loading overlay: opaque, drawn on top of the grid above (z-order, not
-         opacity) so the grid underneath is still genuinely painting/warming up
-         while this covers it. -->
+            <!-- Loading overlay opaque and drawn on top of the grid above -->
             <Grid x:Name="LoadingOverlay" Background="#2A2A2A">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
                     <TextBlock Text="Pre-caching emojis..." Opacity="0.6" HorizontalAlignment="Center" />
