@@ -14,9 +14,13 @@ namespace FluentEmojiKitchen.Services
         private static readonly string AppDataFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "FluentEmojiKitchen");
-        private static readonly string RawEmojiFile = Path.Combine(AppDataFolder, "raw-emoji-file.txt");
-        private static readonly string ParsedEmojiJSON = Path.Combine(AppDataFolder, "emoji-list.json");
+        private static readonly string RawEmojiFile = Path.Combine(AppDataFolder, "raw.txt");
         private static readonly string RawEmojiFileURL = "https://unicode.org/Public/emoji/latest/emoji-test.txt";
+        private static readonly string ParsedEmojiJSON = Path.Combine(AppDataFolder, "emoji-list.json");
+        private static readonly string CLDRAnnotations = Path.Combine(AppDataFolder, "cldr-annot.json");
+        private static readonly string CLDRAnnotationsURL = "https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-annotations-full/annotations/en/annotations.json";
+
+
         public IReadOnlyList<EmojiModel> Emojis { get; }
 
         private EmojiDataService(IReadOnlyList<EmojiModel> emojis)
@@ -41,8 +45,27 @@ namespace FluentEmojiKitchen.Services
             if(!File.Exists(ParsedEmojiJSON) || recachedRawFile)
                 ParseToJSONFromTxt();
 
+            if (!File.Exists(CLDRAnnotations) || recachedRawFile)
+                await DownloadFileAsync(CLDRAnnotationsURL, CLDRAnnotations);
+
+            // Deserialize JSON content to list of all valid emojis.
             string jsonContent = File.ReadAllText(ParsedEmojiJSON);
             var deserializedEmojis = JsonSerializer.Deserialize<List<EmojiModel>>(jsonContent) ?? new List<EmojiModel>();
+
+            // Add search keywords to EmojiModel.
+            var annot = await LoadAnnotAsync();
+            foreach (var emoji in deserializedEmojis)
+            {
+                if (annot.TryGetValue(emoji.Character, out var keywords))
+                {
+                    if (emoji.Name == "cat with wry smile")
+                    {
+                        keywords.Add("smirk");
+                        emoji.Keywords = keywords;
+                    } else emoji.Keywords = keywords;
+
+                }
+            }
 
             return new EmojiDataService(deserializedEmojis);
         }
@@ -114,5 +137,23 @@ namespace FluentEmojiKitchen.Services
 
         private static bool IsCountryFlag(List<int> codepoints) =>
             codepoints.Count == 2 && codepoints.All(cp => cp is >= 0x1F1E6 and <= 0x1F1FF);
+
+        private static async Task<Dictionary<string, List<string>>> LoadAnnotAsync()
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(CLDRAnnotations));
+            var root = doc.RootElement.GetProperty("annotations").GetProperty("annotations");
+
+            var res = new Dictionary<string, List<string>>();
+            foreach (var entry in root.EnumerateObject())
+            {
+                if (entry.Value.TryGetProperty("default", out var keywordsEl))
+                {
+                    res[entry.Name] = keywordsEl.EnumerateArray()
+                        .Select(k => k.GetString()!)
+                        .ToList();
+                }
+            }
+            return res;
+        }
     }
 }

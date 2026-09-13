@@ -35,7 +35,9 @@
 
         <!-- Search box -->
         <TextBox x:Name="SearchBox" Grid.Row="1" Margin="12,0,12,8"
-                 PlaceholderText="Search emojis" CornerRadius="6" />
+                 PlaceholderText="Search emojis" CornerRadius="6"
+                 TextChanged="OnSearchTextChanged"
+                 SelectionHighlightColor="DeepSkyBlue"/>
 
         <!-- Content area -->
         <Grid Grid.Row="2">
@@ -76,7 +78,7 @@
                                 Opacity="{x:Bind SelectedOpacity, Mode=OneWay}" />
 
                                 <TextBlock Text="{x:Bind Character}"
-                                   FontFamily="Segoe UI Emoji"
+                                   FontFamily="{StaticResource NotoColorEmoji}"
                                    FontSize="28"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
@@ -92,7 +94,7 @@
          while this covers it. -->
             <Grid x:Name="LoadingOverlay" Background="#2A2A2A">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-                    <TextBlock Text="Precaching emojis..." Opacity="0.6" HorizontalAlignment="Center" />
+                    <TextBlock Text="Pre-caching emojis..." Opacity="0.6" HorizontalAlignment="Center" />
                     <ProgressBar x:Name="LoadingProgressBar" Width="200" Minimum="0" Maximum="100" Value="0" />
                 </StackPanel>
             </Grid>

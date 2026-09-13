@@ -8,9 +8,11 @@ namespace FluentEmojiKitchen.Models
         IReadOnlyList<int> Codepoints,
         string Name,
         string Group,
-        string Subgroup
+        string Subgroup,
+        List<string>? Keywords = null
     )
     {
+        public List<string>? Keywords { get; set; } = Keywords;
         protected virtual bool PrintMembers(StringBuilder builder)
         {
             builder.Append($"Character = {Character}, ");
@@ -24,6 +26,10 @@ namespace FluentEmojiKitchen.Models
             builder.Append($"Name = {Name}, ");
             builder.Append($"Group = {Group}, ");
             builder.Append($"Subgroup = {Subgroup}");
+            string keywordsText = Keywords is not null
+                ? $"[{string.Join(", ", Keywords)}]"
+                : "null";
+            builder.Append($"Keywords = {keywordsText}");
 
             return true;
         }

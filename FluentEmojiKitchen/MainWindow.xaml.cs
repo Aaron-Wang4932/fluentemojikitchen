@@ -31,6 +31,9 @@ namespace FluentEmojiKitchen
         private readonly Queue<string> _pendingInserts = new();
         private bool _isProcessingInsertQueue;
 
+        private bool doEmojiPrecaching = false;
+        private IReadOnlyList<EmojiModel> emojiList;
+
         // ===== Construction / window setup =====
 
         public MainWindow()
@@ -106,6 +109,7 @@ namespace FluentEmojiKitchen
                 _previousForegroundWindow = GetForegroundWindow();
                 SetAllFocus();
                 AppWindow.Show();
+                SearchBox.Text = string.Empty;
             }
 
             _isPopupVisible = !_isPopupVisible;
@@ -145,37 +149,28 @@ namespace FluentEmojiKitchen
 
         // ===== Emoji grid: data + hover visuals =====
 
-        //public void SetEmojiData(EmojiDataService emojiDataService)
-        //{
-        //    LoadingText.Visibility = Visibility.Collapsed;
-        //    EmojiTabContent.Visibility = Visibility.Visible;
-
-        //    // Remove the display of skin-tonal emojis; only show the base variant (improves performance)
-        //    EmojiRepeater.ItemsSource = emojiDataService.Emojis
-        //        .Where(IsBaseVariant)
-        //        .Select(e => new EmojiItemViewModel(e))
-        //        .ToList();
-        //}
-
         public async Task SetEmojiData(EmojiDataService emojiDataService)
         {
             // Keep "Loading emoji..." visible & EmojiTabContent transparent to allow for glyphs to precache
             EmojiTabContent.Visibility = Visibility.Visible;
-            //EmojiTabContent.Opacity = 0.004; // lowest possible opacity before 0; making it 0 makes the glyphs not precache
 
             EmojiRepeater.ItemsSource = emojiDataService.Emojis
-                .Where(e => IsBaseVariant(e) && !IsGenderedVariation(e))
+                .Where(e => !IsSkinToneVariant(e))
                 .Select(e => new Models.EmojiItemViewModel(e))
                 .ToList();
 
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            await WarmUpEmojiGridAsync();
-            System.Diagnostics.Debug.WriteLine($"Warmup took {sw.ElapsedMilliseconds}ms");
-
+            if(doEmojiPrecaching)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                await WarmUpEmojiGridAsync();
+                System.Diagnostics.Debug.WriteLine($"Warmup took {sw.ElapsedMilliseconds}ms");
+            }
+            LoadingProgressBar.Value = 100;
             LoadingOverlay.Visibility = Visibility.Collapsed;
-            //EmojiTabContent.Opacity = 1;
 
-            System.Diagnostics.Debug.WriteLine(emojiDataService.Emojis.Count(e => IsBaseVariant(e) && !IsGenderedVariation(e)) + " total emojis after filter.");
+            System.Diagnostics.Debug.WriteLine(emojiDataService.Emojis.Count(e => !IsSkinToneVariant(e)) + " total emojis after filter.");
+
+            emojiList = emojiDataService.Emojis;
         }
 
         private async Task WarmUpEmojiGridAsync()
@@ -194,7 +189,7 @@ namespace FluentEmojiKitchen
 
             // Step through the full scrollable range in viewport-sized increments to precache everything.
             // Cannot immediately scroll from very top to very bottom since the glyphs in the middle would not get cached.
-            for (double offset = 0; offset < maxOffset; offset += viewportHeight) // ? += viewportHeight
+            for (double offset = 0; offset < maxOffset; offset += viewportHeight)
             {
                 EmojiTabContent.ChangeView(null, offset, null, disableAnimation: true);
                 await Task.Delay(15);
@@ -205,15 +200,13 @@ namespace FluentEmojiKitchen
 
             EmojiTabContent.ChangeView(null, 0, null, disableAnimation: true);
             await Task.Delay(15);
-
-            LoadingProgressBar.Value = 100;
         }
 
-        private static bool IsBaseVariant(EmojiModel emoji)
+        private static bool IsSkinToneVariant(EmojiModel emoji)
         {
             // Fitzpatrick skin-tone modifiers occupy this exact codepoint range.
             // Any emoji containing one is a toned variant of some other base entry.
-            return !emoji.Codepoints.Any(cp => cp is >= 0x1F3FB and <= 0x1F3FF);
+            return emoji.Codepoints.Any(cp => cp is >= 0x1F3FB and <= 0x1F3FF);
         }
 
         private static bool IsGenderedVariation(EmojiModel emoji)
@@ -250,7 +243,7 @@ namespace FluentEmojiKitchen
                 vm.IsSelected = true;
                 _selectedEmoji = vm;
 
-                System.Diagnostics.Debug.WriteLine(vm.Character);
+                System.Diagnostics.Debug.WriteLine(vm.Model);
 
                 _pendingInserts.Enqueue(vm.Character);
                 if (!_isProcessingInsertQueue)
@@ -281,6 +274,21 @@ namespace FluentEmojiKitchen
 
             _isProcessingInsertQueue = false;
             DispatcherQueue.TryEnqueue(() => _isProgrammaticToggle = false);
+        }
+
+        // ===== Search box =====
+        private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
+        {
+            string query = SearchBox.Text.Trim().ToLowerInvariant();
+
+            var filtered = emojiList.Where(emoji =>
+                emoji.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                (emoji.Keywords?.Any(k => k.Contains(query, StringComparison.OrdinalIgnoreCase)) ?? false)
+            ).ToList();
+
+            EmojiRepeater.ItemsSource = filtered
+                .Where(e => !IsSkinToneVariant(e))
+                .Select(e => new Models.EmojiItemViewModel(e)).ToList();
         }
 
         // ===== Win32 interop =====
