@@ -65,7 +65,7 @@ namespace FluentEmojiKitchen
                 presenter.IsAlwaysOnTop = true;
             }
 
-            AppWindow.Resize(new Windows.Graphics.SizeInt32(360, 480));
+            
             AppWindow.IsShownInSwitchers = false; // hide from Alt+Tab
 
             // Hide from the taskbar, AND prevent this window from ever taking activation.
@@ -79,6 +79,10 @@ namespace FluentEmojiKitchen
             AppWindow.Closing += OnAppWindowClosing;
             this.Activated += OnWindowActivated;
             SetAppIcon();
+
+            var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
+            DisplayArea displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+            AppWindow.Resize(new Windows.Graphics.SizeInt32(360, (int)(displayArea.WorkArea.Height*(0.75)))); // set maximal height to bolster precaching
         }
 
         private void SetAppIcon()
@@ -168,6 +172,74 @@ namespace FluentEmojiKitchen
             EmojiPanelSearchBox.Visibility = Visibility.Collapsed;
         }
 
+        // ===== Auto-fit window width to exactly N emoji columns =====
+
+        // How many emoji columns the grid should always show. 
+        private const int TargetColumns = 6;
+        private const double EmojiItemWidth = 48;
+        private const double EmojiColumnSpacing = 2;
+        // Small safety margin (in DIPs) so a sub-pixel rounding error can't drop
+        // us to 5 columns; we land just above the 6-column boundary, not on it.
+        private const double ColumnFitBuffer = 2;
+
+        private bool _hasAutoFitColumns;
+
+        private static double TargetAvailableWidth =>
+            TargetColumns * EmojiItemWidth + (TargetColumns - 1) * EmojiColumnSpacing + ColumnFitBuffer;
+
+        // Resizes the window (width only, height untouched) so the emoji grid shows
+        // exactly TargetColumns columns.
+        private async Task AutoFitWindowToColumnsAsync()
+        {
+            if (_hasAutoFitColumns) return;
+
+            // Wait for a layout pass so section 0 is realized/measured (same pattern
+            // WarmUpEmojiGridAsync uses); retry a few times in case layout is slow to settle.
+            for (int attempt = 0; attempt < 5; attempt++)
+            {
+                await Task.Delay(50);
+
+                if (EmojiRepeater.TryGetElement(0) is FrameworkElement section
+                    && section.ActualWidth > 0
+                    && this.Content is FrameworkElement root
+                    && root.XamlRoot is not null)
+                {
+                    // Width actually available to the inner UniformGridLayout right now
+                    double measuredAvailableWidth = section.ActualWidth;
+                    double scale = root.XamlRoot.RasterizationScale; // DIP -> physical px
+
+                    double currentContentWidthDip = root.ActualWidth;
+                    double delta = TargetAvailableWidth - measuredAvailableWidth;
+                    double newContentWidthDip = currentContentWidthDip + delta;
+
+                    // AppWindow.Resize sets the OUTER frame in physical pixels
+                    int currentFramePx = AppWindow.Size.Width;
+                    int currentContentPx = (int)Math.Round(currentContentWidthDip * scale);
+                    int chromePx = currentFramePx - currentContentPx;
+
+                    int newFramePx = (int)Math.Round(newContentWidthDip * scale) + chromePx;
+
+                    AppWindow.Resize(new Windows.Graphics.SizeInt32(newFramePx, AppWindow.Size.Height));
+
+                    if (AppWindow.Presenter is OverlappedPresenter presenter)
+                    {
+                        presenter.PreferredMinimumWidth = newFramePx;
+                        presenter.PreferredMaximumWidth = newFramePx;
+                        presenter.PreferredMinimumHeight = newFramePx;
+                    }
+
+                    System.Diagnostics.Debug.WriteLine(
+                        $"AutoFitWindowToColumns: measuredAvailableWidth={measuredAvailableWidth:F1} " +
+                        $"scale={scale} target={TargetAvailableWidth:F1} newFramePx={newFramePx}");
+
+                    _hasAutoFitColumns = true;
+                    return;
+                }
+            }
+
+            System.Diagnostics.Debug.WriteLine("AutoFitWindowToColumns: gave up — section 0 never realized.");
+        }
+
         // ===== Emoji grid: data + hover visuals =====
 
         public async Task SetEmojiData(EmojiDataService emojiDataService)
@@ -179,6 +251,7 @@ namespace FluentEmojiKitchen
             _emojiByCharacter = _emojiDataService.Emojis.ToDictionary(e => e.Character);
 
             RefreshGroupedView();
+            await AutoFitWindowToColumnsAsync(); // resize BEFORE warmup so precache-scroll happens at final size
 
             if (doEmojiPrecaching)
             {
@@ -192,6 +265,12 @@ namespace FluentEmojiKitchen
 
             System.Diagnostics.Debug.WriteLine(_emojiDataService.Emojis.Count(e => !EmojiFilterHelper.IsSkinToneVariant(e)) + " total emojis after filter.");
             ScrollToTopButton.Visibility = Visibility.Visible;
+
+            if (AppWindow.Presenter is OverlappedPresenter presenter)
+            {
+                presenter.IsResizable = true;
+            }
+            AppWindow.Resize(new Windows.Graphics.SizeInt32(AppWindow.Size.Width, 480));
         }
 
         // Groups already-filtered emoji into sections by (Group, Subgroup), in the
@@ -258,6 +337,7 @@ namespace FluentEmojiKitchen
         // in place rather than reassigning ItemsSource so we don't need to do a full re-virtualization
         private void UpdateRecentSection()
         {
+            System.Diagnostics.Debug.Write(EmojiTabContent.ExtentHeight);
             if (_sections is null) return;
 
             var recent = BuildRecentEmojiSection();
@@ -280,7 +360,6 @@ namespace FluentEmojiKitchen
 
         private async Task WarmUpEmojiGridAsync()
         {
-            //LoadingOverlay.Visibility = Visibility.Collapsed;
             var scrollOptions = new ScrollingScrollOptions(ScrollingAnimationMode.Disabled);
             // Let one layout pass happen so ScrollableHeight is actually valid.
             await Task.Delay(50);
@@ -299,8 +378,8 @@ namespace FluentEmojiKitchen
             for (double offset = 0; offset < maxOffset; offset += viewportHeight)
             {
                 EmojiTabContent.ScrollTo(EmojiTabContent.HorizontalOffset, offset, scrollOptions);
-                await Task.Delay(15);
-                System.Diagnostics.Debug.WriteLine(viewportHeight);
+                await Task.Delay(20);
+                //System.Diagnostics.Debug.WriteLine(viewportHeight);
 
                 curProgressBarTick++;
                 LoadingProgressBar.Value = (double)curProgressBarTick / totalProgressBarTicks * 100;
@@ -412,7 +491,9 @@ namespace FluentEmojiKitchen
             ScrollToTopButton.Opacity = shouldShow ? 1 : 0;
             ScrollToTopButton.IsHitTestVisible = shouldShow;
 
-            //System.Diagnostics.Debug.WriteLine(EmojiTabContent.VerticalOffset);
+            //System.Diagnostics.Debug.WriteLine("cur scroll: " + EmojiTabContent.VerticalOffset);
+            //System.Diagnostics.Debug.Write("total height: " + EmojiTabContent.ExtentHeight);
+
         }
 
         private void OnScrollToTopClick(object sender, RoutedEventArgs e)
@@ -420,6 +501,8 @@ namespace FluentEmojiKitchen
             EmojiTabContent.ScrollTo(EmojiTabContent.HorizontalOffset, 0,
                 new ScrollingScrollOptions(ScrollingAnimationMode.Disabled));
         }
+
+
 
         // ===== Win32 interop =====
 

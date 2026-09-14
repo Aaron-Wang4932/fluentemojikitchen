@@ -46,7 +46,7 @@
             <!-- Grouped view: shown when EmojiPanelSearchBox is empty -->
             <ScrollView x:Name="EmojiTabContent"
                   Padding="8,0,8,12"
-                  VerticalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Visible"
                   HorizontalScrollBarVisibility="Hidden"
                   ViewChanged="OnEmojiTabContentScrolled">
                 <ItemsRepeater x:Name="EmojiRepeater">
