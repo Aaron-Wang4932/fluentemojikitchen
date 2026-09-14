@@ -47,7 +47,8 @@
             <ScrollView x:Name="EmojiTabContent"
                   Padding="8,0,8,12"
                   VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Hidden">
+                  HorizontalScrollBarVisibility="Hidden"
+                  ViewChanged="OnEmojiTabContentScrolled">
                 <ItemsRepeater x:Name="EmojiRepeater">
                     <ItemsRepeater.Layout>
                         <StackLayout Orientation="Vertical" Spacing="4" />
@@ -60,7 +61,7 @@
                                            Visibility="{x:Bind GroupHeadingVisibility}"
                                            FontSize="16" FontWeight="SemiBold"
                                            Margin="0,8,0,2" />
-                                <TextBlock Text="{x:Bind SubgroupName}"
+                                <TextBlock Text="{x:Bind SubgroupName, Mode=OneWay}"
                                            FontSize="12" Opacity="0.6"
                                            Margin="0,0,0,4" />
 
@@ -111,10 +112,10 @@
             </ScrollView>
 
             <!-- Flat search-results view: shown while EmojiPanelSearchBox has text -->
-            <ScrollViewer x:Name="SearchResultsContent"
+            <ScrollView x:Name="SearchResultsContent"
                   Padding="8,0,8,12"
                   VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled"
+                  HorizontalScrollBarVisibility="Hidden"
                   Visibility="Collapsed">
                 <ItemsRepeater x:Name="SearchResultsRepeater">
                     <ItemsRepeater.Layout>
@@ -156,7 +157,7 @@
                         </DataTemplate>
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>
-            </ScrollViewer>
+            </ScrollView>
 
             <!-- Loading overlay opaque and drawn on top of the grid above -->
             <Grid x:Name="LoadingOverlay" Background="#2A2A2A">
@@ -172,6 +173,22 @@
                    HorizontalAlignment="Center" VerticalAlignment="Center"
                    Opacity="0.6" />
             </Grid>
+            <Button x:Name="ScrollToTopButton"
+                Visibility="Collapsed"
+                Click="OnScrollToTopClick"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Margin="0,0,16,16"
+                CornerRadius="20"
+                Width="40" Height="40"
+                Padding="0"
+                Opacity="0"
+                IsHitTestVisible="False"
+                Background="#CC2A2A2A">
+                <FontIcon Glyph="&#xE70E;" FontSize="16" />
+                <!-- chevron-up glyph -->
+            </Button>
+
         </Grid>
     </Grid>
 </Window>

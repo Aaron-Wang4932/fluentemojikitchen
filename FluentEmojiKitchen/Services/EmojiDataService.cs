@@ -3,10 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
+using FluentEmojiKitchen.Helpers;
 
+
+// To service and manage all internal and external data required by FluentEmojiKitchen.
 namespace FluentEmojiKitchen.Services
 {
     public class EmojiDataService
@@ -19,15 +21,16 @@ namespace FluentEmojiKitchen.Services
         private static readonly string ParsedEmojiJSON = Path.Combine(AppDataFolder, "emoji-list.json");
         private static readonly string CLDRAnnotations = Path.Combine(AppDataFolder, "cldr-annot.json");
         private static readonly string CLDRAnnotationsURL = "https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-annotations-full/annotations/en/annotations.json";
+        private static readonly string RecentEmojiFile = Path.Combine(AppDataFolder, "recent-emoji.json");
+        private const int MaxRecentCount = 24;
 
+        public List<string> RecentCharacters { get; private set; } = [];
 
         public IReadOnlyList<EmojiModel> Emojis { get; }
 
-        private EmojiDataService(IReadOnlyList<EmojiModel> emojis)
-        {
-            Emojis = emojis;
-        }
+        private EmojiDataService(IReadOnlyList<EmojiModel> emojis) => Emojis = emojis;
 
+        // Factory constructor method.
         public static async Task<EmojiDataService> CreateAsync()
         {
             Directory.CreateDirectory(AppDataFolder);
@@ -37,16 +40,15 @@ namespace FluentEmojiKitchen.Services
             bool recachedRawFile = false;
             if (!File.Exists(RawEmojiFile) || (DateTime.Now - File.GetCreationTime(RawEmojiFile)).TotalDays > 7)
             {
-                //System.Diagnostics.Debug.WriteLine("getting raw data");
-                await DownloadFileAsync(RawEmojiFileURL, RawEmojiFile);
+                await DownloadHelper.DownloadFileAsync(RawEmojiFileURL, RawEmojiFile);
                 recachedRawFile = true;
             }
 
             if(!File.Exists(ParsedEmojiJSON) || recachedRawFile)
-                ParseToJSONFromTxt();
+                ParseUnicodeTxtToJSON();
 
             if (!File.Exists(CLDRAnnotations) || recachedRawFile)
-                await DownloadFileAsync(CLDRAnnotationsURL, CLDRAnnotations);
+                await DownloadHelper.DownloadFileAsync(CLDRAnnotationsURL, CLDRAnnotations);
 
             // Deserialize JSON content to list of all valid emojis.
             string jsonContent = File.ReadAllText(ParsedEmojiJSON);
@@ -67,18 +69,14 @@ namespace FluentEmojiKitchen.Services
                 }
             }
 
-            return new EmojiDataService(deserializedEmojis);
-        }
-        private static async Task DownloadFileAsync(string url, string downloadPath)
-        {
-            var handler = new HttpClientHandler { UseProxy = false };
-            using HttpClient client = new HttpClient(handler);
-            using Stream httpStream = await client.GetStreamAsync(url);
-            using FileStream fileStream = File.Create(downloadPath);
-            await httpStream.CopyToAsync(fileStream);
+            var eds = new EmojiDataService(deserializedEmojis);
+            eds.LoadRecentEmoji();
+
+
+            return eds;
         }
 
-        private static void ParseToJSONFromTxt()
+        private static void ParseUnicodeTxtToJSON()
         {
             string curGroup = "";
             string curSubgroup = "";
@@ -105,7 +103,7 @@ namespace FluentEmojiKitchen.Services
                         .ToList();
 
                     // Skip adding all the country flags.
-                    if (IsCountryFlag(codepoints))
+                    if (EmojiFilterHelper.IsCountryFlag(codepoints))
                         continue;
 
                     string[] nameInfo = semicolonSplit[1].Trim().Split(" ", StringSplitOptions.RemoveEmptyEntries);
@@ -114,7 +112,7 @@ namespace FluentEmojiKitchen.Services
 
                     EmojiModel emojiModel = new EmojiModel(emoji, codepoints, name, curGroup, curSubgroup);
                     emojis.Add(emojiModel);
-                } 
+                }
             }
 
             // Add regional indicators
@@ -132,12 +130,7 @@ namespace FluentEmojiKitchen.Services
 
             string jsonString = JsonSerializer.Serialize(emojis);
             File.WriteAllText(ParsedEmojiJSON, jsonString);
-            //System.Diagnostics.Debug.WriteLine("finished json serializing");
         }
-
-        private static bool IsCountryFlag(List<int> codepoints) =>
-            codepoints.Count == 2 && codepoints.All(cp => cp is >= 0x1F1E6 and <= 0x1F1FF);
-
         private static async Task<Dictionary<string, List<string>>> LoadAnnotAsync()
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(CLDRAnnotations)); 
@@ -154,6 +147,33 @@ namespace FluentEmojiKitchen.Services
                 }
             }
             return res;
+        }
+        private void LoadRecentEmoji()
+        {
+            if(!File.Exists(RecentEmojiFile))
+            {
+                RecentCharacters = new();
+                File.Create(RecentEmojiFile).Dispose();
+                return;
+            }
+            try
+            {
+                RecentCharacters = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(RecentEmojiFile)) ?? [];
+            } catch
+            {
+                RecentCharacters = [];
+            }
+        }
+        public void AddRecent(string character)
+        {
+            if (RecentCharacters.Contains(character))
+                return;
+            RecentCharacters.Insert(0, character); // most recent goes to the front
+
+            if (RecentCharacters.Count > MaxRecentCount)
+                RecentCharacters = RecentCharacters.Take(MaxRecentCount).ToList();
+
+            File.WriteAllText(RecentEmojiFile, JsonSerializer.Serialize(RecentCharacters));
         }
     }
 }
