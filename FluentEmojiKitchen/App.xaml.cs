@@ -11,11 +11,11 @@ namespace FluentEmojiKitchen
         private TrayIconService? _trayIconService;
         private GlobalHotkeyService? _globalHotkeyService;
 
-        public App() 
+        public App()
         {
             // to fix issue where devices with non-functional ipv6 address will wait for download to time out before trying ipv4
-            AppContext.SetSwitch("System.Net.DisableIPv6", true); 
-            InitializeComponent(); 
+            AppContext.SetSwitch("System.Net.DisableIPv6", true);
+            InitializeComponent();
         }
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)

@@ -17,23 +17,24 @@ namespace FluentEmojiKitchen
 {
     public sealed partial class MainWindow : Window
     {
-        // ===== Fields =====
+        /*****
+         Fields
+         *****/
 
-        // Initial state upon loading: window not visible.
+        // Initial state
         private bool _isPopupVisible = false;
 
         // Calling AppWindow.Show()/Hide() can itself trigger Activated event handler while TogglePopupVisibility is still running.
         // We set a flag to indicate that we are still in the midst of changing states.
         private bool _isProgrammaticToggle;
 
-        private Models.EmojiItemViewModel? _selectedEmoji;
         private IntPtr _previousForegroundWindow;
+
+        private Models.EmojiItemViewModel? _selectedEmoji;
 
         // Queued emoji characters awaiting insertion into the previously-focused app.
         private readonly Queue<string> _pendingInserts = new();
         private bool _isProcessingInsertQueue;
-
-        private bool doEmojiPrecaching = true;
         private EmojiDataService? _emojiDataService;
 
         // Backing collection for EmojiRepeater.ItemsSource. Mutated in place to prevent full re-virtualization
@@ -42,18 +43,17 @@ namespace FluentEmojiKitchen
         // Cached lookup from character -> EmojiModel so rebuilding Recent section doesn't need to read through entire emoji list
         private Dictionary<string, EmojiModel>? _emojiByCharacter;
 
+        private bool doEmojiPrecaching = true;
+
         // ===== Construction / window setup =====
 
         public MainWindow()
         {
             // Initialize contents in MainWindow.xaml
             this.InitializeComponent();
-            // Makes TabStripGrid in the associated .xaml the title bar (enables repositioning of window)
             SetTitleBar(TabStripGrid);
-
             SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
-            // Removes the native system bar.
-            ExtendsContentIntoTitleBar = true;
+            ExtendsContentIntoTitleBar = true; // Removes the native system bar.
 
             // Configuration of window position and sizing
             if (AppWindow.Presenter is OverlappedPresenter presenter)
@@ -65,16 +65,8 @@ namespace FluentEmojiKitchen
                 presenter.IsAlwaysOnTop = true;
             }
 
-            
-            AppWindow.IsShownInSwitchers = false; // hide from Alt+Tab
-
-            // Hide from the taskbar, AND prevent this window from ever taking activation.
             IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
-            exStyle |= WS_EX_TOOLWINDOW;
-            exStyle &= ~WS_EX_APPWINDOW;
-            SetWindowLong(hWnd, GWL_EXSTYLE, exStyle);
-
+            CharacterizeWindowAsPopup(hWnd);
 
             AppWindow.Closing += OnAppWindowClosing;
             this.Activated += OnWindowActivated;
@@ -82,7 +74,15 @@ namespace FluentEmojiKitchen
 
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
             DisplayArea displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
-            AppWindow.Resize(new Windows.Graphics.SizeInt32(360, (int)(displayArea.WorkArea.Height*(0.75)))); // set maximal height to bolster precaching
+            AppWindow.Resize(new Windows.Graphics.SizeInt32(360, (int)(displayArea.WorkArea.Height * (0.75)))); // set maximal height to bolster precaching
+        }
+        private void CharacterizeWindowAsPopup(IntPtr hWnd)
+        {
+            AppWindow.IsShownInSwitchers = false; // hide from Alt+Tab
+            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+            exStyle |= WS_EX_TOOLWINDOW;
+            exStyle &= ~WS_EX_APPWINDOW;
+            SetWindowLong(hWnd, GWL_EXSTYLE, exStyle);
         }
 
         private void SetAppIcon()
