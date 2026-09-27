@@ -4,7 +4,8 @@
       "commandName": "MsixPackage"
     },
     "FluentEmojiKitchen (Unpackaged)": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "debugEngines": "managed,native"
     }
   }
 }

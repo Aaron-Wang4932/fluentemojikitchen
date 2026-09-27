@@ -20,6 +20,9 @@ namespace FluentEmojiKitchen
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
+            Current.DebugSettings.LayoutCycleTracingLevel = LayoutCycleTracingLevel.High;
+            Current.DebugSettings.LayoutCycleDebugBreakLevel = LayoutCycleDebugBreakLevel.Low;
+
             _globalHotkeyService = new GlobalHotkeyService();
             _globalHotkeyService.HotkeyPressed += TogglePopup;
             _globalHotkeyService.Install();

@@ -4,6 +4,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -43,7 +44,13 @@ namespace FluentEmojiKitchen
         // Cached lookup from character -> EmojiModel so rebuilding Recent section doesn't need to read through entire emoji list
         private Dictionary<string, EmojiModel>? _emojiByCharacter;
 
-        private bool doEmojiPrecaching = true;
+        private bool doEmojiPrecaching = false;
+
+        // ===== Kitchen tab state =====
+        private enum KitchenSlot { None, Left, Right }
+        private KitchenSlot _activeKitchenSlot = KitchenSlot.None; // which slot's picker is currently open, if any
+        private Models.EmojiItemViewModel? _kitchenLeftEmoji;
+        private Models.EmojiItemViewModel? _kitchenRightEmoji;
 
         // ===== Construction / window setup =====
 
@@ -51,6 +58,8 @@ namespace FluentEmojiKitchen
         {
             // Initialize contents in MainWindow.xaml
             this.InitializeComponent();
+
+
             SetTitleBar(TabStripGrid);
             SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
             ExtendsContentIntoTitleBar = true; // Removes the native system bar.
@@ -58,7 +67,7 @@ namespace FluentEmojiKitchen
             // Configuration of window position and sizing
             if (AppWindow.Presenter is OverlappedPresenter presenter)
             {
-                presenter.IsResizable = false;
+                //presenter.IsResizable = false;
                 presenter.IsMaximizable = false;
                 presenter.IsMinimizable = false;
                 presenter.SetBorderAndTitleBar(true, false);
@@ -87,7 +96,7 @@ namespace FluentEmojiKitchen
 
         private void SetAppIcon()
         {
-            string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets/Icons/AppIcon.ico");
+            string iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets/Icons/AppIcon.ico");
             if (File.Exists(iconPath))
                 this.AppWindow.SetIcon(iconPath);
         }
@@ -120,6 +129,7 @@ namespace FluentEmojiKitchen
                 AppWindow.Hide();
                 EmojiTabContent.ScrollTo(0, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled)); // scroll to top
                 EmojiPanelSearchBox.Text = string.Empty; // clear searchbar
+                KitchenSearchBox.Text = string.Empty; // clear kitchen searchbar too
                 _selectedEmoji?.IsSelected = false; // reset border on selected 
             }
 
@@ -170,6 +180,175 @@ namespace FluentEmojiKitchen
             SearchResultsContent.Visibility = Visibility.Collapsed;
             KitchenTabContent.Visibility = Visibility.Visible;
             EmojiPanelSearchBox.Visibility = Visibility.Collapsed;
+
+            UpdateKitchenView();
+        }
+
+        // ===== Kitchen tab =====
+
+        // Tapping a slot opens its picker at the bottom; tapping the already-active
+        // slot again closes the picker (deselects), leaving whatever emoji (if any)
+        // was already chosen in place.
+        private void OnKitchenSlotTapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement { Tag: string tagStr }) return;
+            var slot = tagStr == "Left" ? KitchenSlot.Left : KitchenSlot.Right;
+
+            _activeKitchenSlot = _activeKitchenSlot == slot ? KitchenSlot.None : slot;
+            UpdateKitchenView();
+        }
+
+        // Picking an emoji from the Kitchen picker fills whichever slot is currently
+        // active and closes the picker (mirrors tapping the slot again).
+        private void OnKitchenPickerEmojiClick(object sender, TappedRoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement { Tag: Models.EmojiItemViewModel vm }) return;
+            if (_activeKitchenSlot == KitchenSlot.None) return;
+
+            if (_activeKitchenSlot == KitchenSlot.Left)
+                _kitchenLeftEmoji = vm;
+            else
+                _kitchenRightEmoji = vm;
+
+            _activeKitchenSlot = KitchenSlot.None;
+            UpdateKitchenView();
+        }
+
+        // The little X on a filled slot: clears just that slot back to empty. Uses Tapped (not
+        // Click) so it can mark the event Handled -- otherwise the tap would bubble up to the
+        // slot Grid's own Tapped handler and immediately re-open/toggle that slot's picker.
+        private void OnKitchenSlotClearTapped(object sender, TappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+
+            if (sender is not FrameworkElement { Tag: string tagStr }) return;
+
+            if (tagStr == "Left")
+                _kitchenLeftEmoji = null;
+            else
+                _kitchenRightEmoji = null;
+
+            UpdateKitchenView();
+        }
+
+        // What the Kitchen tab looks like: slot contents/highlight, plus which of {hint, picker, merged result} the bottom area shows.
+        private void UpdateKitchenView()
+        {
+            SetKitchenSlotVisual(KitchenSlotLeftPlus, KitchenSlotLeftEmoji, KitchenSlotLeftBorder, KitchenSlotLeftClearButton,
+                _kitchenLeftEmoji, _activeKitchenSlot == KitchenSlot.Left);
+            SetKitchenSlotVisual(KitchenSlotRightPlus, KitchenSlotRightEmoji, KitchenSlotRightBorder, KitchenSlotRightClearButton,
+                _kitchenRightEmoji, _activeKitchenSlot == KitchenSlot.Right);
+
+            bool bothFilled = _kitchenLeftEmoji is not null && _kitchenRightEmoji is not null;
+
+            if (_activeKitchenSlot != KitchenSlot.None)
+            {
+                // A slot is being (re)picked — always show the picker, even if both
+                // slots already held emoji from a previous pick.
+                KitchenPickerRepeater.ItemsSource ??= _emojiDataService is not null
+                    ? BuildKitchenSections(_emojiDataService.SupportedFusionEmojis)
+                    : null;
+
+                KitchenHintText.Visibility = Visibility.Collapsed;
+                KitchenPickerContent.Visibility = Visibility.Visible;
+                KitchenResultContent.Visibility = Visibility.Collapsed;
+            }
+            else if (bothFilled)
+            {
+                KitchenHintText.Visibility = Visibility.Collapsed;
+                KitchenPickerContent.Visibility = Visibility.Collapsed;
+                KitchenResultContent.Visibility = Visibility.Visible;
+                _ = LoadKitchenMergedResultAsync();
+            }
+            else
+            {
+                KitchenHintText.Visibility = Visibility.Visible;
+                KitchenPickerContent.Visibility = Visibility.Collapsed;
+                KitchenResultContent.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private static void SetKitchenSlotVisual(TextBlock plusText, TextBlock emojiText, Rectangle border, Button clearButton,
+            Models.EmojiItemViewModel? chosen, bool isActive)
+        {
+            plusText.Visibility = chosen is null ? Visibility.Visible : Visibility.Collapsed;
+            emojiText.Visibility = chosen is null ? Visibility.Collapsed : Visibility.Visible;
+            clearButton.Visibility = chosen is null ? Visibility.Collapsed : Visibility.Visible;
+            if (chosen is not null) emojiText.Text = chosen.Character;
+
+            border.Stroke = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[
+                isActive ? "AccentFillColorDefaultBrush" : "TextFillColorSecondaryBrush"];
+        }
+
+        // Groups Kitchen-supported emoji into sections by Group only (no subgroup headings) --
+        // unlike BuildSections, this groups directly on Group so each group appears exactly once,
+        // with every emoji from all of that group's subgroups folded into one list underneath it.
+        private static List<EmojiSectionViewModel> BuildKitchenSections(IEnumerable<EmojiModel> emojis)
+        {
+            return emojis
+                .GroupBy(e => e.Group)
+                .Select(g => new EmojiSectionViewModel(
+                    g.Key,
+                    subgroupName: "",
+                    isFirstInGroup: true, // one section per group here, so the heading always shows
+                    g.Select(e => new Models.EmojiItemViewModel(e)).ToList()))
+                .ToList();
+        }
+
+        // Kitchen tab's own search box: same match logic as the main tab's UpdateEmojiView, just
+        // scoped to SupportedFusionEmojis and swapping between the grouped view and a flat results grid.
+        private void OnKitchenSearchTextChanged(object sender, TextChangedEventArgs e) => UpdateKitchenPickerView();
+
+        private void UpdateKitchenPickerView()
+        {
+            string query = KitchenSearchBox.Text.Trim();
+
+            if (string.IsNullOrEmpty(query))
+            {
+                KitchenPickerGroupedContent.Visibility = Visibility.Visible;
+                KitchenPickerSearchResultsContent.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var matches = (_emojiDataService?.SupportedFusionEmojis ?? Enumerable.Empty<EmojiModel>())
+                .Where(emoji =>
+                    emoji.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    emoji.Group.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    emoji.Subgroup.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    (emoji.Keywords?.Any(k => k.Contains(query, StringComparison.OrdinalIgnoreCase)) ?? false))
+                .Select(e => new Models.EmojiItemViewModel(e))
+                .ToList();
+
+            KitchenPickerSearchResultsRepeater.ItemsSource = matches;
+
+            KitchenPickerGroupedContent.Visibility = Visibility.Collapsed;
+            KitchenPickerSearchResultsContent.Visibility = Visibility.Visible;
+        }
+
+        // TODO: this is UI-only for now. 
+        private async Task LoadKitchenMergedResultAsync()
+        {
+            KitchenResultLoadingRing.IsActive = true;
+            KitchenResultImage.Source = null;
+            KitchenCopyButton.IsEnabled = false;
+
+            await Task.Delay(400); // stand-in for the real metadata lookup + image fetch
+
+            KitchenResultLoadingRing.IsActive = false;
+            KitchenCopyButton.IsEnabled = true;
+        }
+
+
+        private void OnKitchenSizeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (KitchenResultContent.Visibility == Visibility.Visible)
+                _ = LoadKitchenMergedResultAsync();
+        }
+
+        // TODO: copy the actual rendered PNG (at KitchenSizeComboBox's selected size)
+        // to the clipboard once EmojiKitchenService produces a real bitmap.
+        private void OnKitchenCopyClick(object sender, RoutedEventArgs e)
+        {
         }
 
         // ===== Auto-fit window width to exactly N emoji columns =====
@@ -371,22 +550,48 @@ namespace FluentEmojiKitchen
                 return; // nothing to warm up (e.g. window not yet sized)
 
             int totalProgressBarTicks = (int)Math.Ceiling(maxOffset / viewportHeight);
-            int curProgressBarTick = 0;
+            LoadingProgressBar.Value = 0;
 
             // Step through the full scrollable range in viewport-sized increments to precache everything.
             // Cannot immediately scroll from very top to very bottom since the glyphs in the middle would not get cached.
-            for (double offset = 0; offset < maxOffset; offset += viewportHeight)
+            for (int tick = 1; tick <= totalProgressBarTicks; tick++)
             {
-                EmojiTabContent.ScrollTo(EmojiTabContent.HorizontalOffset, offset, scrollOptions);
+                double offset = Math.Min(tick * viewportHeight, maxOffset);
+                await ScrollEmojiTabToAsync(EmojiTabContent.HorizontalOffset, offset, scrollOptions);
+                // Give the newly visible emojis a chance to render before moving on.
                 await Task.Delay(20);
-                //System.Diagnostics.Debug.WriteLine(viewportHeight);
 
-                curProgressBarTick++;
-                LoadingProgressBar.Value = (double)curProgressBarTick / totalProgressBarTicks * 100;
+                // Save the last 5% for returning to the top and settling.
+                LoadingProgressBar.Value = 95.0 * tick / totalProgressBarTicks;
             }
 
-            EmojiTabContent.ScrollTo(0, 0, scrollOptions);
+            await ScrollEmojiTabToAsync(0, 0, scrollOptions);
             await Task.Delay(350);
+        }
+
+        private async Task ScrollEmojiTabToAsync(double horizontalOffset, double verticalOffset, ScrollingScrollOptions options)
+        {
+            var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            int correlationId = -1;
+
+            void OnScrollCompleted(ScrollView sender, ScrollingScrollCompletedEventArgs args)
+            {
+                if (args.CorrelationId == correlationId)
+                    completed.TrySetResult(true);
+            }
+
+            EmojiTabContent.ScrollCompleted += OnScrollCompleted;
+            try
+            {
+                correlationId = EmojiTabContent.ScrollTo(horizontalOffset, verticalOffset, options);
+                // -1 means the control did not start a scroll (for example, already at the target).
+                if (correlationId != -1)
+                    await completed.Task;
+            }
+            finally
+            {
+                EmojiTabContent.ScrollCompleted -= OnScrollCompleted;
+            }
         }
 
 
@@ -455,9 +660,7 @@ namespace FluentEmojiKitchen
 
         private void OnSearchTextChanged(object sender, TextChangedEventArgs e) => UpdateEmojiView();
 
-        // Shows the grouped view when the search box is empty, or a flat filtered
-        // grid when it has text — called both on text change and when switching
-        // back to the Emoji tab, so the two stay in sync regardless of entry point.
+        // Show section headings without a search query, and no headings (flat grid) with query.
         private void UpdateEmojiView()
         {
             string query = EmojiPanelSearchBox.Text.Trim();

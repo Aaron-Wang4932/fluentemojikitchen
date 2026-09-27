@@ -16,67 +16,110 @@ namespace FluentEmojiKitchen.Services
         private static readonly string AppDataFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "FluentEmojiKitchen");
+        private static readonly string ParsedEmojiJSON = Path.Combine(AppDataFolder, "emoji-list.json");
         private static readonly string RawEmojiFile = Path.Combine(AppDataFolder, "raw.txt");
         private static readonly string RawEmojiFileURL = "https://unicode.org/Public/emoji/latest/emoji-test.txt";
-        private static readonly string ParsedEmojiJSON = Path.Combine(AppDataFolder, "emoji-list.json");
         private static readonly string CLDRAnnotations = Path.Combine(AppDataFolder, "cldr-annot.json");
         private static readonly string CLDRAnnotationsURL = "https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-annotations-full/annotations/en/annotations.json";
         private static readonly string RecentEmojiFile = Path.Combine(AppDataFolder, "recent-emoji.json");
+        private static readonly string SupportedEmojiAndKeywordsURL = "https://raw.githubusercontent.com/xsalazar/emoji-kitchen-backend/refs/heads/main/app/keywords.json";
+        private static readonly string SupportedEmojiAndKeywordsFile = Path.Combine(AppDataFolder, "keyw-and-supported.json");
+
         private const int MaxRecentCount = 24;
+
+        // A raw external source that gets folded into ParsedEmojiJSON.
+        // NOTE TO SELF TO ADD A NEW SOURCE: add an entry and its merge step inside BuildParsedEmojiJSONAsync.
+        private sealed record CachedSource(string Url, string LocalPath, TimeSpan MaxAge);
+
+        private static readonly List<CachedSource> Sources = new()
+        {
+            // List of all emojis
+            new CachedSource(RawEmojiFileURL, RawEmojiFile, TimeSpan.FromDays(7)),
+            // List of all emoji annotations
+            new CachedSource(CLDRAnnotationsURL, CLDRAnnotations, TimeSpan.FromDays(7)),
+            // List of all supported emoji kitchen (fusion) emojis + some more search keywords
+            new CachedSource(SupportedEmojiAndKeywordsURL, SupportedEmojiAndKeywordsFile, TimeSpan.FromDays(7))
+        };
 
         public List<string> RecentCharacters { get; private set; } = [];
 
         public IReadOnlyList<EmojiModel> Emojis { get; }
 
-        private EmojiDataService(IReadOnlyList<EmojiModel> emojis) => Emojis = emojis;
+        public IReadOnlyList<EmojiModel> SupportedFusionEmojis { get; }
+
+        private EmojiDataService(IReadOnlyList<EmojiModel> emojis, IReadOnlyList<EmojiModel> supportedFusionEmojis)
+        {
+            Emojis = emojis;
+            SupportedFusionEmojis = supportedFusionEmojis;
+        }
 
         // Factory constructor method.
         public static async Task<EmojiDataService> CreateAsync()
         {
             Directory.CreateDirectory(AppDataFolder);
 
-            // Recache RawEmojiFile if it does not exist or if the file age > 1 week = 7 days.
-            // Recache ParsedEmojiJSON if it does not exist or if RawEmojiFile was recached.
-            bool recachedRawFile = false;
-            if (!File.Exists(RawEmojiFile) || (DateTime.Now - File.GetCreationTime(RawEmojiFile)).TotalDays > 7)
+            // Refresh every raw source that's missing or older than its own MaxAge.
+            bool anySourceRefreshed = false;
+            foreach (var source in Sources)
             {
-                await DownloadHelper.DownloadFileAsync(RawEmojiFileURL, RawEmojiFile);
-                recachedRawFile = true;
+                if (await EnsureFreshAsync(source))
+                    anySourceRefreshed = true;
             }
 
-            if(!File.Exists(ParsedEmojiJSON) || recachedRawFile)
-                ParseUnicodeTxtToJSON();
 
-            if (!File.Exists(CLDRAnnotations) || recachedRawFile)
-                await DownloadHelper.DownloadFileAsync(CLDRAnnotationsURL, CLDRAnnotations);
+            // ParsedEmojiJSON already has everything (codepoints, names, groups, keywords) from the last time the app was run
+            // Only rebuild when source changed or if JSON does not exist.
+            if (!File.Exists(ParsedEmojiJSON) || anySourceRefreshed)
+                await BuildParsedEmojiJSONAsync();
 
-            // Deserialize JSON content to list of all valid emojis.
             string jsonContent = File.ReadAllText(ParsedEmojiJSON);
             var deserializedEmojis = JsonSerializer.Deserialize<List<EmojiModel>>(jsonContent) ?? new List<EmojiModel>();
+            var supportedFusionEmojis = LoadSupportedFusionEmojis(deserializedEmojis);
 
-            // Add search keywords to EmojiModel.
-            var annot = await LoadAnnotAsync();
-            foreach (var emoji in deserializedEmojis)
-            {
-                if (annot.TryGetValue(emoji.Character, out var keywords))
-                {
-                    if (emoji.Name == "cat with wry smile")
-                    {
-                        keywords.Add("smirk");
-                        emoji.Keywords = keywords;
-                    } else emoji.Keywords = keywords;
-
-                }
-            }
-
-            var eds = new EmojiDataService(deserializedEmojis);
+            var eds = new EmojiDataService(deserializedEmojis, supportedFusionEmojis);
             eds.LoadRecentEmoji();
-
 
             return eds;
         }
 
-        private static void ParseUnicodeTxtToJSON()
+        // Downloads the source if it's missing or stale. Returns whether it downloaded.
+        private static async Task<bool> EnsureFreshAsync(CachedSource source)
+        {
+            if (!File.Exists(source.LocalPath) || (DateTime.Now - File.GetCreationTime(source.LocalPath)) > source.MaxAge)
+            {
+                await DownloadHelper.DownloadFileAsync(source.Url, source.LocalPath);
+                return true;
+            }
+            return false;
+        }
+
+        // Rebuilds ParsedEmojiJSON from scratch:
+        // - parses the raw Unicode emoji-test.txt into EmojiModels
+        // - merges in CLDR keyword annotations
+        // - writes the fully-populated result to disk
+        private static async Task BuildParsedEmojiJSONAsync()
+        {
+            var emojis = ParseUnicodeTxt();
+
+            var annot = await LoadAnnotAsync();
+            foreach (var emoji in emojis)
+            {
+
+                if (annot.TryGetValue(emoji.Character, out var keywords))
+                {
+                    if (emoji.Name == "cat with wry smile")
+                        keywords.Add("smirk"); // because I like to use smirk-cat.
+
+                    emoji.Keywords = keywords;
+                }
+            }
+
+            string jsonString = JsonSerializer.Serialize(emojis);
+            File.WriteAllText(ParsedEmojiJSON, jsonString);
+        }
+
+        // Parses RawEmojiFile into EmojiModels (no keywords yet)
+        private static List<EmojiModel> ParseUnicodeTxt()
         {
             string curGroup = "";
             string curSubgroup = "";
@@ -128,29 +171,64 @@ namespace FluentEmojiKitchen.Services
                     "regional-indicator"));
             }
 
-            string jsonString = JsonSerializer.Serialize(emojis);
-            File.WriteAllText(ParsedEmojiJSON, jsonString);
+            return emojis;
         }
+
         private static async Task<Dictionary<string, List<string>>> LoadAnnotAsync()
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(CLDRAnnotations)); 
-            var root = doc.RootElement.GetProperty("annotations").GetProperty("annotations");
+            using var mainDoc = JsonDocument.Parse(File.ReadAllText(CLDRAnnotations));
+            var root = mainDoc.RootElement.GetProperty("annotations").GetProperty("annotations");
 
             var res = new Dictionary<string, List<string>>();
             foreach (var entry in root.EnumerateObject())
             {
-                if (entry.Value.TryGetProperty("default", out var keywordsEl))
+                if (entry.Value.TryGetProperty("default", out var keywords))
                 {
-                    res[entry.Name] = keywordsEl.EnumerateArray()
+                    res[entry.Name] = keywords.EnumerateArray()
                         .Select(k => k.GetString()!)
                         .ToList();
                 }
             }
+
+            using var addendumDoc = JsonDocument.Parse(File.ReadAllText(SupportedEmojiAndKeywordsFile));
+            var addendumRoot = addendumDoc.RootElement.GetProperty("data");
+            foreach (var entry in addendumRoot.EnumerateObject())
+            {
+                if (entry.Value.TryGetProperty("keywords", out var keywords) && entry.Value.TryGetProperty("emoji", out var emojiChar))
+                {
+                    var keywordAddendum = keywords.EnumerateArray()
+                        .Select(k => k.GetString()!)
+                        .ToList();
+                    var key = emojiChar.GetString()!;
+
+                    res[key] = res.TryGetValue(key, out var existingKeywords)
+                        ? existingKeywords.Concat(keywordAddendum).Distinct().ToList()
+                        : keywordAddendum;
+                }
+            }
+
+
             return res;
         }
+
+
+        private static List<EmojiModel> LoadSupportedFusionEmojis(IReadOnlyList<EmojiModel> allEmojis)
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(SupportedEmojiAndKeywordsFile));
+            var knownSupportedCodepoints = doc.RootElement.GetProperty("knownSupportedEmoji")
+                .EnumerateArray()
+                .Select(e => e.GetString()!)
+                .ToHashSet();
+
+            return allEmojis
+                .Where(e => knownSupportedCodepoints.Contains(string.Join("-", e.Codepoints.Select(cp => cp.ToString("x")))))
+                .ToList();
+        }
+
+
         private void LoadRecentEmoji()
         {
-            if(!File.Exists(RecentEmojiFile))
+            if (!File.Exists(RecentEmojiFile))
             {
                 RecentCharacters = new();
                 File.Create(RecentEmojiFile).Dispose();
@@ -159,7 +237,8 @@ namespace FluentEmojiKitchen.Services
             try
             {
                 RecentCharacters = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(RecentEmojiFile)) ?? [];
-            } catch
+            }
+            catch
             {
                 RecentCharacters = [];
             }

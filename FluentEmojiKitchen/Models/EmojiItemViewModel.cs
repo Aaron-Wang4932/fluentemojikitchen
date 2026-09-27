@@ -1,4 +1,7 @@
-﻿using System.ComponentModel;
+﻿using FluentEmojiKitchen.Services;
+using Microsoft.UI.Xaml.Media;
+using System;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
 namespace FluentEmojiKitchen.Models
