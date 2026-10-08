@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
 	<WindowsPackageType>None</WindowsPackageType>
     <OutputType>WinExe</OutputType>
@@ -21,9 +21,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Remove="Assets\Fonts\NotoColorEmoji.ttf" />
-  </ItemGroup>
-  <ItemGroup>
-    <Page Remove="views\MainWindow.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -48,11 +45,6 @@
     <Content Update="Assets\Fonts\NotoColorEmoji.ttf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-  </ItemGroup>
-  <ItemGroup>
-    <None Update="Views\MainWindow.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </None>
   </ItemGroup>
 
   <!--

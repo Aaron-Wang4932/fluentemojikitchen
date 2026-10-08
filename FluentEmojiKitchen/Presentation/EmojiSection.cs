@@ -1,15 +1,14 @@
-﻿using Microsoft.UI.Xaml;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace FluentEmojiKitchen.Models
+namespace FluentEmojiKitchen.Presentation
 {
     // One group/subgroup section of the grouped emoji grid — a large heading
     // (shown only on the first subgroup of a new group), a small subgroup
     // heading, and the emoji belonging to that subgroup.
-    public class EmojiSectionViewModel : INotifyPropertyChanged
+    public class EmojiSection : INotifyPropertyChanged
     {
         public string GroupName { get; }
         private string _subgroupName;
@@ -23,17 +22,17 @@ namespace FluentEmojiKitchen.Models
                 OnPropertyChanged();
             }
         }
-        public Visibility GroupHeadingVisibility { get; }
-        public ObservableCollection<EmojiItemViewModel> Emojis { get; }
+        public bool ShowGroupHeading { get; }
+        public ObservableCollection<EmojiItem> Emojis { get; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        public EmojiSectionViewModel(string groupName, string subgroupName, bool isFirstInGroup, IEnumerable<EmojiItemViewModel> emojis)
+        public EmojiSection(string groupName, string subgroupName, bool isFirstInGroup, IEnumerable<EmojiItem> emojis)
         {
             GroupName = groupName;
             _subgroupName = subgroupName;
-            GroupHeadingVisibility = isFirstInGroup ? Visibility.Visible : Visibility.Collapsed;
-            Emojis = new ObservableCollection<EmojiItemViewModel>(emojis);
+            ShowGroupHeading = isFirstInGroup;
+            Emojis = new ObservableCollection<EmojiItem>(emojis);
         }
         
         private void OnPropertyChanged([CallerMemberName] string? name = null)

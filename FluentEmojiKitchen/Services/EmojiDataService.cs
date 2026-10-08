@@ -1,4 +1,5 @@
-﻿using FluentEmojiKitchen.Models;
+using FluentEmojiKitchen.Models;
+using FluentEmojiKitchen.Contracts;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,7 +12,7 @@ using FluentEmojiKitchen.Helpers;
 // To service and manage all internal and external data required by FluentEmojiKitchen.
 namespace FluentEmojiKitchen.Services
 {
-    public class EmojiDataService
+    public class EmojiDataService : IEmojiCatalog
     {
         private static readonly string AppDataFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -42,6 +43,7 @@ namespace FluentEmojiKitchen.Services
         };
 
         public List<string> RecentCharacters { get; private set; } = [];
+        IReadOnlyList<string> IEmojiCatalog.RecentCharacters => RecentCharacters;
 
         public IReadOnlyList<EmojiModel> Emojis { get; }
 

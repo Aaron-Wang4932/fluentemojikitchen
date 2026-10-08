@@ -1,12 +1,11 @@
-﻿using FluentEmojiKitchen.Services;
-using Microsoft.UI.Xaml.Media;
+using FluentEmojiKitchen.Models;
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace FluentEmojiKitchen.Models
+namespace FluentEmojiKitchen.Presentation
 {
-    public class EmojiItemViewModel : INotifyPropertyChanged
+    public class EmojiItem : INotifyPropertyChanged
     {
         public EmojiModel Model { get; }
         public string Character => Model.Character;
@@ -26,7 +25,7 @@ namespace FluentEmojiKitchen.Models
         }
         public double SelectedOpacity => IsSelected ? 1 : 0;
 
-        public EmojiItemViewModel(EmojiModel model) => Model = model;
+        public EmojiItem(EmojiModel model) => Model = model;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 

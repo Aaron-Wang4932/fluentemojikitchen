@@ -1,11 +1,11 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 
-namespace FluentEmojiKitchen.Services
+namespace FluentEmojiKitchen.Services.Windows
 {
     public sealed class HotkeyRegistryService
     {

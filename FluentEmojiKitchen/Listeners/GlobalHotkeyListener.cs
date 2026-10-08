@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.UI.Dispatching;
 
-namespace FluentEmojiKitchen.Services
+namespace FluentEmojiKitchen.Listeners
 {
-    public sealed class GlobalHotkeyService : IDisposable
+    public sealed class GlobalHotkeyListener : IDisposable
     {
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN = 0x0100;
@@ -26,7 +26,7 @@ namespace FluentEmojiKitchen.Services
 
         public event Action? HotkeyPressed;
 
-        public GlobalHotkeyService()
+        public GlobalHotkeyListener()
         {
             _hookProc = HookCallback;
             _uiDispatcherQueue = DispatcherQueue.GetForCurrentThread();

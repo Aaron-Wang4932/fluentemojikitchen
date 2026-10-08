@@ -1,5 +1,7 @@
-﻿using System;
+using System;
 using System.Windows.Input;
+
+namespace FluentEmojiKitchen.Helpers;
 
 internal sealed class RelayCommand : ICommand
 {

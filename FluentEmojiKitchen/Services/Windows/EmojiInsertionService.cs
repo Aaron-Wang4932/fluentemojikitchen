@@ -1,6 +1,6 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 
-namespace FluentEmojiKitchen.Services
+namespace FluentEmojiKitchen.Services.Windows
 {
     public static class EmojiInsertionService
     {

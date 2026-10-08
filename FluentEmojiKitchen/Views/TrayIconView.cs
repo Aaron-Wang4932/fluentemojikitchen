@@ -1,16 +1,17 @@
-﻿using H.NotifyIcon;
+using H.NotifyIcon;
+using FluentEmojiKitchen.Helpers;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using Microsoft.UI.Xaml.Media.Imaging;
 
-namespace FluentEmojiKitchen.Services
+namespace FluentEmojiKitchen.Views
 {
-    public sealed class TrayIconService : IDisposable
+    public sealed class TrayIconView : IDisposable
     {
         private readonly TaskbarIcon _icon;
         public event Action? ToggleRequested;
         public event Action? ExitRequested;
-        public TrayIconService()
+        public TrayIconView()
         {
             _icon = new TaskbarIcon
             {
@@ -25,7 +26,6 @@ namespace FluentEmojiKitchen.Services
                 Text = "Exit",
                 Command = new RelayCommand(() => ExitRequested?.Invoke())
             };
-            exitItem.Click += (_, _) => ExitRequested?.Invoke();
 
             var menu = new MenuFlyout();
             menu.Items.Add(exitItem);
