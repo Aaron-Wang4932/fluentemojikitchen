@@ -89,6 +89,7 @@ public sealed class PopupWindowService : IPopupWindow, IDisposable
         _targetThread = PopupNativeMethods.GetWindowThreadProcessId(_target, out _targetProcess);
         unchecked { ++_session; if (_session == 0) ++_session; }
         _searchMode = false; SetNonActivating(true);
+        PositionNearCaret();
         _visible = true;
         _window.AppWindow.Show(false);
         _outsideClicks.Arm(_session);
@@ -163,4 +164,128 @@ public sealed class PopupWindowService : IPopupWindow, IDisposable
         _window.AppWindow.Closing -= OnClosing;
         PopupNativeMethods.RemoveWindowSubclass(_handle, _subclass, SubclassId);
     }
+
+    private void PositionNearCaret()
+    {
+        var info = new CaretThreadInfo
+        {
+            cbSize = (uint)Marshal.SizeOf<CaretThreadInfo>()
+        };
+
+        NativePoint top;
+        NativePoint bottom;
+
+        bool foundCaret =
+            GetGUIThreadInfo(_targetThread, ref info) &&
+            info.hwndCaret != IntPtr.Zero &&
+            info.rcCaret.Bottom > info.rcCaret.Top;
+
+        if (foundCaret)
+        {
+            top = new NativePoint
+            {
+                X = info.rcCaret.Left,
+                Y = info.rcCaret.Top
+            };
+
+            bottom = new NativePoint
+            {
+                X = info.rcCaret.Left,
+                Y = info.rcCaret.Bottom
+            };
+
+            foundCaret =
+                ClientToScreen(info.hwndCaret, ref top) &&
+                ClientToScreen(info.hwndCaret, ref bottom);
+        }
+        else
+        {
+            top = bottom = default;
+        }
+
+        if (!foundCaret)
+        {
+            if (!GetCursorPos(out bottom))
+                return;
+
+            top = bottom;
+        }
+
+        var anchor = new global::Windows.Graphics.PointInt32(
+            bottom.X, bottom.Y);
+
+        var display = DisplayArea.GetFromPoint(
+            anchor, DisplayAreaFallback.Nearest);
+
+        var work = display.WorkArea;
+        var size = _window.AppWindow.Size;
+
+        const int gap = 8; // Screen pixels.
+
+        int x = bottom.X;
+        int y = bottom.Y + gap;
+
+        // Prefer above the caret if the picker would extend below the screen.
+        if (y + size.Height > work.Y + work.Height)
+            y = top.Y - size.Height - gap;
+
+        // Keep the picker within this monitor's work area.
+        // Math.Max also handles a picker larger than the available area.
+        x = Math.Clamp(
+            x,
+            work.X,
+            Math.Max(work.X, work.X + work.Width - size.Width));
+
+        y = Math.Clamp(
+            y,
+            work.Y,
+            Math.Max(work.Y, work.Y + work.Height - size.Height));
+
+        _window.AppWindow.Move(
+            new global::Windows.Graphics.PointInt32(x, y));
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CaretThreadInfo
+    {
+        public uint cbSize;
+        public uint flags;
+        public IntPtr hwndActive;
+        public IntPtr hwndFocus;
+        public IntPtr hwndCapture;
+        public IntPtr hwndMenuOwner;
+        public IntPtr hwndMoveSize;
+        public IntPtr hwndCaret;
+        public NativeRect rcCaret;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetGUIThreadInfo(
+        uint threadId, ref CaretThreadInfo info);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ClientToScreen(
+        IntPtr window, ref NativePoint point);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out NativePoint point);
 }

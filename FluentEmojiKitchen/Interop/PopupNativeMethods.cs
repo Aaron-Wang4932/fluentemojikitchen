@@ -52,4 +52,7 @@ internal static class PopupNativeMethods
     // Includes native child windows and owned flyouts/context menus.
     internal static bool BelongsToPopup(IntPtr hwnd, IntPtr popup) => hwnd != IntPtr.Zero &&
         (hwnd == popup || GetAncestor(hwnd, 2) == popup || GetAncestor(hwnd, 3) == popup);
+
+
+
 }
