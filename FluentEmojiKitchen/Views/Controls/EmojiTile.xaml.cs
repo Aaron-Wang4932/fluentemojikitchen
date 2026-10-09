@@ -20,6 +20,6 @@ public sealed partial class EmojiTile : UserControl
     private void OnPointerExited(object sender, PointerRoutedEventArgs e) => HoverLayer.Opacity = 0;
     private void OnTapped(object sender, TappedRoutedEventArgs e)
     {
-        if (Item is not null) Invoked?.Invoke(this, new EmojiChosenEventArgs(Item));
+        if (IsEnabled && Item is { IsEnabled: true }) Invoked?.Invoke(this, new EmojiChosenEventArgs(Item));
     }
 }

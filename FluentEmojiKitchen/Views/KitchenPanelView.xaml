@@ -70,7 +70,9 @@
                                         </ItemsRepeater.Layout>
                                         <ItemsRepeater.ItemTemplate>
                                             <DataTemplate x:DataType="models:EmojiItem">
-                                                <controls:EmojiTile Item="{x:Bind}" Invoked="OnEmojiChosen" />
+                                                <controls:EmojiTile Item="{x:Bind}" Invoked="OnEmojiChosen"
+                                                    IsEnabled="{x:Bind IsEnabled, Mode=OneWay}"
+                                                    Opacity="{x:Bind TileOpacity, Mode=OneWay}" />
                                             </DataTemplate>
                                         </ItemsRepeater.ItemTemplate>
                                     </ItemsRepeater>
@@ -97,7 +99,9 @@
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="models:EmojiItem">
-                                <controls:EmojiTile Item="{x:Bind}" Invoked="OnEmojiChosen" />
+                                <controls:EmojiTile Item="{x:Bind}" Invoked="OnEmojiChosen"
+                                                    IsEnabled="{x:Bind IsEnabled, Mode=OneWay}"
+                                                    Opacity="{x:Bind TileOpacity, Mode=OneWay}" />
                             </DataTemplate>
                         </ItemsRepeater.ItemTemplate>
                     </ItemsRepeater>
@@ -110,14 +114,14 @@
                 Margin="0,16,0,0"
                 Spacing="14"
                 Visibility="Collapsed">
-                <Grid Width="128" Height="128" HorizontalAlignment="Center">
+                <Grid x:Name="KitchenImageFrame" Width="128" Height="128" HorizontalAlignment="Center">
                     <Image x:Name="KitchenResultImage" Stretch="Uniform" />
                     <ProgressRing x:Name="KitchenResultLoadingRing" IsActive="False" Width="32" Height="32" />
                 </Grid>
                 <TextBlock x:Name="ResultMessage" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="280" Opacity="0.6" />
                 <ComboBox
                     x:Name="KitchenSizeComboBox"
-                    Header="PNG size"
+                    Header="Copied PNG size"
                     HorizontalAlignment="Center"
                     SelectionChanged="OnKitchenSizeChanged"
                     SelectedIndex="0">

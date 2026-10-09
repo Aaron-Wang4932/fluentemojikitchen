@@ -7,7 +7,7 @@ public sealed partial class LoadingOverlay : UserControl
     public LoadingOverlay() => InitializeComponent();
     public void Show(string message, double progress)
     {
-        LoadingMessage.Text = message;
+        LoadingMessage.Text = $"{message} ({progress:F0}%)";
         LoadingProgressBar.Visibility = Visibility.Visible;
         LoadingProgressBar.Value = progress;
         Visibility = Visibility.Visible;

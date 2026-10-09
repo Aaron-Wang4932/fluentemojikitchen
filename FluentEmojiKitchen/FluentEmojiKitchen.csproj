@@ -63,4 +63,8 @@
     <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
     <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Standalone core tests must not be compiled into the WinUI executable. -->
+    <Compile Remove="Tests\**\*.cs" />
+  </ItemGroup>
 </Project>

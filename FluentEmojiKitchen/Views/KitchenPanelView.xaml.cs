@@ -19,6 +19,8 @@ public sealed partial class KitchenPanelView : UserControl, IKitchenView
     public event Action<int>? SizeChangedRequested;
     public event Action? CopyRequested;
     private Uri? _displayedImage;
+    private BitmapImage? _bitmap;
+    private bool _imageLoading;
     public event Action? SearchFocusRequested;
     public KitchenPanelView()
     {
@@ -44,14 +46,40 @@ public sealed partial class KitchenPanelView : UserControl, IKitchenView
         KitchenPickerContent.Visibility = picking ? Visibility.Visible : Visibility.Collapsed;
         KitchenResultContent.Visibility = result ? Visibility.Visible : Visibility.Collapsed;
         KitchenHintText.Visibility = !picking && !result ? Visibility.Visible : Visibility.Collapsed;
-        KitchenResultLoadingRing.IsActive = state.IsLoading;
-        KitchenCopyButton.IsEnabled = !state.IsLoading && state.Result?.ImageUri is not null;
+        KitchenResultLoadingRing.IsActive = state.IsLoading || _imageLoading;
+        KitchenCopyButton.IsEnabled = !state.IsLoading && !state.IsCopying && state.Result is { CanCopy: true, ImageUri: not null };
         ResultMessage.Text = state.Result?.Message ?? "";
+        // Preview dimensions belong exclusively to KitchenImageFrame in XAML.
+        // Decode the original image; export size must not reduce preview quality.
         var uri = state.Result?.ImageUri;
         if (uri != _displayedImage)
         {
             _displayedImage = uri;
-            KitchenResultImage.Source = uri is null ? null : new BitmapImage(uri);
+            _bitmap = null;
+            _imageLoading = false;
+            KitchenResultLoadingRing.IsActive = state.IsLoading;
+            KitchenResultImage.Source = null;
+            if (uri is not null)
+            {
+                var bitmap = new BitmapImage();
+                _bitmap = bitmap;
+                _imageLoading = true;
+                KitchenResultLoadingRing.IsActive = true;
+                bitmap.ImageOpened += (_, _) =>
+                {
+                    if (ReferenceEquals(_bitmap, bitmap))
+                    { _imageLoading = false; KitchenResultLoadingRing.IsActive = false; }
+                };
+                bitmap.ImageFailed += (_, _) =>
+                {
+                    if (!ReferenceEquals(_bitmap, bitmap)) return;
+                    _imageLoading = false;
+                    KitchenResultLoadingRing.IsActive = false;
+                    ResultMessage.Text = "Could not display this image. Select the pair again to retry.";
+                };
+                KitchenResultImage.Source = bitmap;
+                bitmap.UriSource = uri;
+            }
         }
     }
     private void OnSlotTapped(object? sender, EventArgs e) => SlotTapped?.Invoke(GetSlot(sender));

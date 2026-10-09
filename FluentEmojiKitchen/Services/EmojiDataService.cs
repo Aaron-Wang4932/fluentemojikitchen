@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Threading;
 using FluentEmojiKitchen.Helpers;
 
 
@@ -56,17 +57,24 @@ namespace FluentEmojiKitchen.Services
         }
 
         // Factory constructor method.
-        public static async Task<EmojiDataService> CreateAsync()
+        public static async Task<EmojiDataService> CreateAsync(IProgress<StartupProgress>? progress = null, CancellationToken cancellationToken = default)
         {
             Directory.CreateDirectory(AppDataFolder);
 
             // Refresh every raw source that's missing or older than its own MaxAge.
             bool anySourceRefreshed = false;
-            foreach (var source in Sources)
+            for (int i = 0; i < Sources.Count; i++)
             {
-                if (await EnsureFreshAsync(source))
+                cancellationToken.ThrowIfCancellationRequested();
+                var source = Sources[i];
+                double start = i * 20;
+                progress?.Report(new($"Checking {Path.GetFileName(source.LocalPath)}...", start));
+                if (await EnsureFreshAsync(source, p => progress?.Report(new(
+                    $"Downloading {Path.GetFileName(source.LocalPath)}: {p.Description}", start + 20 * p.Fraction)), cancellationToken))
                     anySourceRefreshed = true;
             }
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report(new("Processing emoji names and keywords...", 65));
 
 
             // ParsedEmojiJSON already has everything (codepoints, names, groups, keywords) from the last time the app was run
@@ -74,6 +82,7 @@ namespace FluentEmojiKitchen.Services
             if (!File.Exists(ParsedEmojiJSON) || anySourceRefreshed)
                 await BuildParsedEmojiJSONAsync();
 
+            progress?.Report(new("Reading emoji catalogue...", 85));
             string jsonContent = File.ReadAllText(ParsedEmojiJSON);
             var deserializedEmojis = JsonSerializer.Deserialize<List<EmojiModel>>(jsonContent) ?? new List<EmojiModel>();
             var supportedFusionEmojis = LoadSupportedFusionEmojis(deserializedEmojis);
@@ -81,16 +90,25 @@ namespace FluentEmojiKitchen.Services
             var eds = new EmojiDataService(deserializedEmojis, supportedFusionEmojis);
             eds.LoadRecentEmoji();
 
+            progress?.Report(new("Emoji catalogue ready", 100));
             return eds;
         }
 
         // Downloads the source if it's missing or stale. Returns whether it downloaded.
-        private static async Task<bool> EnsureFreshAsync(CachedSource source)
+        private static async Task<bool> EnsureFreshAsync(CachedSource source, Action<DownloadProgress>? progress, CancellationToken token)
         {
-            if (!File.Exists(source.LocalPath) || (DateTime.Now - File.GetCreationTime(source.LocalPath)) > source.MaxAge)
+            if (!File.Exists(source.LocalPath) || (DateTime.Now - File.GetLastWriteTime(source.LocalPath)) > source.MaxAge)
             {
-                await DownloadHelper.DownloadFileAsync(source.Url, source.LocalPath);
-                return true;
+                try
+                {
+                    await DownloadHelper.DownloadFileAsync(source.Url, source.LocalPath, progress, token);
+                    return true;
+                }
+                catch (Exception ex) when (!token.IsCancellationRequested && File.Exists(source.LocalPath) &&
+                    ex is System.Net.Http.HttpRequestException or IOException or OperationCanceledException)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Using cached {source.LocalPath}: {ex.Message}");
+                }
             }
             return false;
         }
@@ -117,7 +135,7 @@ namespace FluentEmojiKitchen.Services
             }
 
             string jsonString = JsonSerializer.Serialize(emojis);
-            File.WriteAllText(ParsedEmojiJSON, jsonString);
+            CacheFiles.WriteText(ParsedEmojiJSON, jsonString);
         }
 
         // Parses RawEmojiFile into EmojiModels (no keywords yet)

@@ -11,6 +11,20 @@ namespace FluentEmojiKitchen.Presentation
         public string Character => Model.Character;
         public string EmojiName => Model.Name;
 
+        private bool _isEnabled = true;
+        public bool IsEnabled
+        {
+            get => _isEnabled;
+            set
+            {
+                if (_isEnabled == value) return;
+                _isEnabled = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(TileOpacity));
+            }
+        }
+        public double TileOpacity => IsEnabled ? 1 : 0.25;
+
         private bool _isSelected;
         public bool IsSelected
         {

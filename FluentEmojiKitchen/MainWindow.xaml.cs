@@ -35,6 +35,8 @@ public sealed partial class MainWindow : Window, IMainView
     public void SetLoading(bool loading, string message, double progress)
     {
         Tabs.SetTabsEnabled(!loading);
+        EmojiPanel.IsHitTestVisible = !loading;
+        KitchenPanel.IsHitTestVisible = !loading;
         if (loading) StartupOverlay.Show(message, progress);
         else StartupOverlay.Visibility = Visibility.Collapsed;
     }

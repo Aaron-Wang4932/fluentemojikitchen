@@ -22,6 +22,7 @@ public sealed class PopupWindowService : IPopupWindow, IDisposable
     private int _session;
     private bool _visible, _searchMode, _disposed;
     public event Action? Hidden;
+    public event Action? Shown;
     internal int CurrentSession => _visible ? _session : 0;
 
     public PopupWindowService(Window window)
@@ -93,6 +94,7 @@ public sealed class PopupWindowService : IPopupWindow, IDisposable
         _visible = true;
         _window.AppWindow.Show(false);
         _outsideClicks.Arm(_session);
+        Shown?.Invoke();
     }
     public void BeginSearch(Action focusSearch)
     {

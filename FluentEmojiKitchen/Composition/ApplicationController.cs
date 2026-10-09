@@ -16,6 +16,7 @@ public sealed class ApplicationController : IDisposable
     private readonly MainPresenter _presenter;
     private readonly ApplicationInputListener _input;
     private readonly EmojiInsertionQueue _insertion;
+    private readonly OnlineKitchenService _images;
     private bool _disposed;
     public ApplicationController(AppOptions options)
     {
@@ -27,9 +28,12 @@ public sealed class ApplicationController : IDisposable
         _window.EmojiView.SearchFocusRequested += BeginEmojiSearch;
         _window.KitchenView.SearchFocusRequested += BeginKitchenSearch;
         var emoji = new EmojiPanelPresenter(_window.EmojiView, queries, _insertion);
-        var kitchen = new KitchenPresenter(_window.KitchenView, queries, new PlaceholderKitchenService());
+        _images = new OnlineKitchenService(System.IO.Path.Combine(CacheFiles.DirectoryPath, "kitchen-images"), new KitchenImageClipboard(WinRT.Interop.WindowNative.GetWindowHandle(_window)));
+        var metadata = new KitchenMetadataCache(CacheFiles.DirectoryPath, new KitchenMetadataParser());
+        var loader = new StartupDataLoader(metadata, _images);
+        var kitchen = new KitchenPresenter(_window.KitchenView, queries, _images);
         _presenter = new MainPresenter(_window, _popup, layout, emoji, kitchen,
-            async () => await EmojiDataService.CreateAsync(), options);
+            loader, options);
         _input = new ApplicationInputListener(_presenter.TogglePopup, Exit);
     }
     private void BeginEmojiSearch() => _popup.BeginSearch(_window.EmojiView.FocusSearch);
@@ -53,6 +57,7 @@ public sealed class ApplicationController : IDisposable
         _window.KitchenView.SearchFocusRequested -= BeginKitchenSearch;
         _insertion.Dispose();
         _presenter.Dispose();
+        _images.Dispose();
         _popup.Dispose();
     }
 }

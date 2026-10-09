@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../../Models/*.cs" />
+    <Compile Include="../../Contracts/*.cs" />
+    <Compile Include="../../Presentation/*.cs" />
+    <Compile Include="../../Configuration/AppOptions.cs" />
+    <Compile Include="../../Presenters/*.cs" />
+    <Compile Include="../../Services/*.cs" />
+    <Compile Include="../../Helpers/DownloadHelper.cs" />
+    <Compile Include="../../Helpers/EmojiFilterHelper.cs" />
+  </ItemGroup>
+</Project>
