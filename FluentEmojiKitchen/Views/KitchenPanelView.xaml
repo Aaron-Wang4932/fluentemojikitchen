@@ -107,6 +107,8 @@
                     </ItemsRepeater>
                 </ScrollView>
             </Grid>
+            
+            
             <StackPanel
                 x:Name="KitchenResultContent"
                 HorizontalAlignment="Center"
@@ -124,18 +126,25 @@
                     Header="Copied PNG size"
                     HorizontalAlignment="Center"
                     SelectionChanged="OnKitchenSizeChanged"
-                    SelectedIndex="0">
-                    <ComboBoxItem Content="48 x 48 (discord native size)" Tag="48" />
+                    SelectedIndex="1">
+                    <ComboBoxItem Content="48 x 48" Tag="48" />
+                    <ComboBoxItem Content="96 x 96" Tag="96" />
                     <ComboBoxItem Content="128 x 128" Tag="128" />
                     <ComboBoxItem Content="256 x 256" Tag="256" />
                     <ComboBoxItem Content="512 x 512" Tag="512" />
                 </ComboBox>
                 <Button
                     x:Name="KitchenCopyButton"
-                    Content="Copy to clipboard"
+                    Content="Copy image to clipboard"
                     HorizontalAlignment="Center"
                     Click="OnKitchenCopyClick"
                     IsEnabled="False" />
+                <Button
+                    x:Name="KitchenURLCopyButton"
+                    Content="Copy URL to clipboard"
+                    HorizontalAlignment="Center"
+                    Click="OnKitchenCopyURLClick"
+                    IsEnabled="False" />        
             </StackPanel>
         </Grid>
     </Grid>

@@ -10,6 +10,8 @@ public partial class App : Application
     public App()
     {
         AppContext.SetSwitch("System.Net.DisableIPv6", true);
+        ResourceManagerRequested += (_, args) => args.CustomResourceManager =
+            Services.Windows.EmojiFontResources.CreateResourceManager();
         InitializeComponent();
     }
     protected override void OnLaunched(LaunchActivatedEventArgs args)

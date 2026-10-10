@@ -66,12 +66,50 @@ static class Program
             Check((await cache.LoadAsync(null, CancellationToken.None)).Urls.Count == 3, "corrupt compact rebuilt");
             Console.WriteLine("PASS cache: compressed round trip, compact-only startup, damaged compact recovery");
 
+            Check(!CachePolicy.MonthlyExpired(new DateTime(2026, 1, 31), new DateTime(2026, 2, 27)), "calendar month remains fresh");
+            Check(CachePolicy.MonthlyExpired(new DateTime(2026, 1, 31), new DateTime(2026, 2, 28)), "month-end expiry");
+            var settings = new ColumnSettingsStore(dir);
+            settings.Save(9); Check(settings.Load(6) == 9, "column setting persists");
+            File.WriteAllText(Path.Combine(dir, "settings-columns.txt"), "NaN");
+            Check(settings.Load(6) == 6, "invalid setting falls back");
+            Check(!EmojiFontCache.ValidFont(raw), "non-font rejected");
+            var snapshots = new StartupSnapshotCache();
+            var firstSnapshot = snapshots.Update("catalog-a", () => new FakeCatalog(new[] { coffee }), "index-a", () => compatibility, "font-a");
+            var sameSnapshot = snapshots.Update("catalog-a", () => throw new Exception("duplicate catalogue"), "index-a", () => throw new Exception("duplicate index"), "font-a");
+            Check(ReferenceEquals(firstSnapshot.Catalog, sameSnapshot.Catalog) && ReferenceEquals(firstSnapshot.Compatibility, sameSnapshot.Compatibility), "identical refresh reuses snapshots");
+            var changedSnapshot = snapshots.Update("catalog-b", () => new FakeCatalog(new[] { smile }), "index-a", () => throw new Exception("duplicate index"), "font-b");
+            Check(!ReferenceEquals(changedSnapshot.Catalog, sameSnapshot.Catalog) && ReferenceEquals(changedSnapshot.Compatibility, sameSnapshot.Compatibility), "changed catalogue replaces only changed snapshot");
             ImageRetentionTests(dir);
             await PresenterTests(compatibility, coffee, smile, cry);
             await StartupTests(compatibility, new[] { coffee, smile, cry });
-            if (args.Length > 0) await FullMetadataTest(args[0], dir);
+            if (args.Length > 1 && args[0] == "--font") await FontRefreshTests(dir, args[1]);
+            else if (args.Length > 0) await FullMetadataTest(args[0], dir);
         }
         finally { Directory.Delete(dir, true); }
+    }
+    static async Task FontRefreshTests(string root, string source)
+    {
+        int downloads = 0;
+        string directory = Path.Combine(root, "font-refresh");
+        byte[] bytes = File.ReadAllBytes(source);
+        var cache = new EmojiFontCache(directory, (url, target, progress, token) =>
+        { downloads++; File.WriteAllBytes(target, bytes); return Task.CompletedTask; });
+        string first = await cache.LoadAsync(null, CancellationToken.None, true);
+        for (int i = 0; i < 5; i++)
+            Check(await cache.LoadAsync(null, CancellationToken.None, true) == first, "identical font reuses filename");
+        Check(downloads == 6, "force still performs each requested download");
+        Check(Directory.GetFiles(Path.Combine(directory, "fonts"), "*.ttf").Length == 1, "identical refreshes leave one font file");
+        File.SetLastWriteTimeUtc(Path.Combine(directory, "fonts", "current-font.txt"), DateTime.UtcNow.AddMonths(-2));
+        Check(cache.NeedsRefresh(), "monthly font refresh uses receipt age");
+        await cache.LoadAsync(null, CancellationToken.None);
+        Check(downloads == 7 && !cache.NeedsRefresh(), "identical download renews monthly receipt");
+        File.Delete(first);
+        await cache.LoadAsync(null, CancellationToken.None);
+        Check(downloads == 8 && File.Exists(first), "missing font redownloads");
+        bytes[^1] ^= 1; // A different valid SFNT payload must receive a different identity.
+        string changed = await cache.LoadAsync(null, CancellationToken.None, true);
+        Check(changed != first, "changed font gets a new identity");
+        Console.WriteLine("PASS font refresh: forced downloads, stable identical identity, receipt expiry, missing file, changed bytes");
     }
     static void ImageRetentionTests(string root)
     {
@@ -90,11 +128,12 @@ static class Program
             Check(!File.Exists(old) && !File.Exists(temp), "expired owned images and abandoned temporary files removed");
             Check(File.Exists(recent) && File.Exists(pinned) && File.Exists(other), "recent, leased and unrelated files preserved");
         }
-        Check(File.GetLastWriteTimeUtc(pinned) > DateTime.UtcNow.AddMinutes(-1), "last-use time refreshed after release");
-        File.SetLastWriteTimeUtc(pinned, DateTime.UtcNow.AddDays(-8));
+        Check(File.GetLastWriteTimeUtc(pinned) < DateTime.UtcNow.AddDays(-7), "active use does not extend download expiry");
         cache.Sweep(DateTime.UtcNow);
         Check(!File.Exists(pinned), "released expired file can be evicted");
-        Console.WriteLine("PASS image retention: seven-day expiry, active leases, last-use refresh, owned-file-only cleanup");
+        cache.Invalidate();
+        Check(!File.Exists(recent) && File.Exists(other), "forced image invalidation clears only owned images");
+        Console.WriteLine("PASS image retention: seven-day expiry, active leases, absolute expiry, owned-file-only cleanup");
     }
     static async Task PresenterTests(IKitchenCompatibility compatibility, params EmojiModel[] models)
     {
@@ -149,7 +188,8 @@ static class Program
             var task = main.InitializeAsync();
             Check(view.Loading && popup.Toggles == 0 && !emojiView.Ready, "startup remains hidden with overlay prepared");
             view.SelectTab(); Check(view.TabChanges == 0, "tabs gated during loading");
-            loader.Completion.SetResult(new(new FakeCatalog(models), compatibility));
+            var catalogue = new FakeCatalog(models);
+            loader.Completion.SetResult(new(catalogue, compatibility));
             await emojiView.SectionsSet.Task;
             Check(!layout.Entered.Task.IsCompleted && emojiView.WarmupCalls == 0, "hidden startup does not realize layout");
             main.TogglePopup();
@@ -166,6 +206,15 @@ static class Program
             Check(!view.Loading && view.Percent == 100 && emojiView.Ready, "ready after all phases");
             Check(emojiView.WarmupCalls == (warmup ? 1 : 0), "warmup option respected");
             view.SelectTab(); Check(view.TabChanges == 1, "tabs enabled after loading");
+            int sectionsBefore = emojiView.SectionAssignments;
+            loader.Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            var rebuild = main.RebuildCachesAsync();
+            Check(view.Loading && loader.LastForce, "forced rebuild restores overlay and bypasses caches");
+            Check(ReferenceEquals(rebuild, main.RebuildCachesAsync()), "duplicate rebuild joins existing operation");
+            loader.Completion.SetResult(new(catalogue, compatibility));
+            await rebuild;
+            Check(emojiView.SectionAssignments == sectionsBefore, "unchanged refresh does not recreate catalogue controls");
+            Check(!view.Loading && popup.Toggles == 1, "rebuild completes without toggling window");
         }
         Console.WriteLine("PASS startup: hidden launch, explicit opening, interaction gate, layout wait, warmup on/off, final readiness");
     }
@@ -258,6 +307,8 @@ sealed class FakeMainView : IMainView
     public bool Loading; public double Percent; public int TabChanges;
     public void ShowTab(PanelTab tab) => TabChanges++;
     public void SetLoading(bool loading, string message, double progress) { Loading = loading; Percent = progress; }
+    public void ApplyEmojiFont(string path) { }
+    public void SetSettingsEnabled(bool enabled) { }
     public void ShowInitializationError(string message) => Loading = true;
     public void SelectTab() => TabRequested?.Invoke(PanelTab.Kitchen);
 }
@@ -271,13 +322,15 @@ sealed class FakeLayout : IWindowLayout
 {
     public TaskCompletionSource Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public TaskCompletionSource Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    public Task FitColumnsAsync() { Entered.SetResult(); return Completion.Task; }
+    public Task FitColumnsAsync() { Entered.TrySetResult(); return Completion.Task; }
     public void FinishLoading() { }
+    public void ResetFit() { }
 }
 sealed class FakeLoader : IStartupDataLoader
 {
     public TaskCompletionSource<StartupData> Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    public Task<StartupData> LoadAsync(IProgress<StartupProgress> progress, CancellationToken cancellationToken) => Completion.Task;
+    public Task<StartupData> LoadAsync(IProgress<StartupProgress> progress, CancellationToken cancellationToken, bool force = false) { LastForce = force; return Completion.Task; }
+    public bool LastForce;
 }
 sealed class FakeInsertion : IEmojiInsertionQueue { public void Enqueue(string character) { } }
 sealed class FakeEmojiView : IEmojiPanelView
@@ -286,13 +339,13 @@ sealed class FakeEmojiView : IEmojiPanelView
     public event Action<EmojiItem>? EmojiChosen;
     public TaskCompletionSource Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public TaskCompletionSource Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    public bool Ready; public int WarmupCalls;
+    public bool Ready; public int WarmupCalls; public int SectionAssignments;
     public TaskCompletionSource SectionsSet = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    public void SetSections(IEnumerable<EmojiSection> sections) { SectionsSet.TrySetResult(); }
+    public void SetSections(IEnumerable<EmojiSection> sections) { SectionAssignments++; SectionsSet.TrySetResult(); }
     public void ShowSearchResults(IReadOnlyList<EmojiItem> results, bool searching) { }
     public void ResetView() { }
     public void FocusSearch() { }
     public void SetReady() => Ready = true;
     public void ShowError(string message) { }
-    public Task WarmUpAsync(Action<double> progress) { WarmupCalls++; Entered.SetResult(); return Completion.Task; }
+    public Task WarmUpAsync(Action<double> progress) { WarmupCalls++; Entered.TrySetResult(); return Completion.Task; }
 }

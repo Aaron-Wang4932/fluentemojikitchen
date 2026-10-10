@@ -6,4 +6,5 @@ public interface IWindowLayout
 {
     Task FitColumnsAsync();
     void FinishLoading();
+    void ResetFit();
 }

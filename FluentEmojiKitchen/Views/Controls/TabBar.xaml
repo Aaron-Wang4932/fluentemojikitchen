@@ -7,6 +7,7 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <StackPanel Orientation="Horizontal" Grid.Column="0" Spacing="6">
             <ToggleButton
@@ -15,17 +16,22 @@
                 IsChecked="True"
                 Click="OnEmojiTabClick"
                 CornerRadius="14"
-                Padding="14,6" />
+                Padding="8,6" />
             <ToggleButton
                 x:Name="KitchenTabButton"
                 Content="Kitchen"
                 Click="OnKitchenTabClick"
                 CornerRadius="14"
-                Padding="14,6" />
+                Padding="8,6" />
         </StackPanel>
+        <Button x:Name="SettingsButton" Grid.Column="1" Click="OnSettingsClick"
+            Background="Transparent" BorderThickness="0" Padding="8,4" VerticalAlignment="Center"
+            ToolTipService.ToolTip="Settings" AutomationProperties.Name="Settings">
+            <FontIcon Glyph="&#xE713;" FontSize="16" />
+        </Button>
         <Button
             x:Name="CloseButton"
-            Grid.Column="1"
+            Grid.Column="2"
             Content="✕"
             Click="OnCloseButtonClick"
             Background="Transparent"

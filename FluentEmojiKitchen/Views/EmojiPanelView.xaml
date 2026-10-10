@@ -2,6 +2,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:controls="using:FluentEmojiKitchen.Views.Controls"
     xmlns:layouts="using:FluentEmojiKitchen.Views.Layouts"
+    xmlns:fonts="using:FluentEmojiKitchen.Services.Windows"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     x:Class="FluentEmojiKitchen.Views.EmojiPanelView"
     xmlns:models="using:FluentEmojiKitchen.Presentation"
@@ -75,7 +76,7 @@
                                                             BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
                                                             Opacity="{x:Bind SelectedOpacity, Mode=OneWay}" />
                                                     <TextBlock Text="{x:Bind Character}"
-                                                               FontFamily="{StaticResource NotoColorEmoji}"
+                                                               FontFamily="{StaticResource NotoColorEmoji}" fonts:EmojiFontResources.UseEmojiFont="True"
                                                                FontSize="28" HorizontalAlignment="Center"
                                                                VerticalAlignment="Center" IsHitTestVisible="False" />
                                                 </Grid>
@@ -123,7 +124,7 @@
                                         BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
                                         Opacity="{x:Bind SelectedOpacity, Mode=OneWay}" />
                                 <TextBlock Text="{x:Bind Character}"
-                                           FontFamily="{StaticResource NotoColorEmoji}"
+                                           FontFamily="{StaticResource NotoColorEmoji}" fonts:EmojiFontResources.UseEmojiFont="True"
                                            FontSize="28" HorizontalAlignment="Center"
                                            VerticalAlignment="Center" IsHitTestVisible="False" />
                             </Grid>

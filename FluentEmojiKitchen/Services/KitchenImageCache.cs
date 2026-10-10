@@ -31,15 +31,8 @@ public sealed class KitchenImageCache : IDisposable
                 throw new ArgumentException("Image must belong to this cache.", nameof(path));
             _leases.TryGetValue(path, out int count);
             _leases[path] = count + 1;
-            Touch(path);
             return new Lease(this, path);
         }
-    }
-    private static void Touch(string path)
-    {
-        try { if (File.Exists(path)) File.SetLastWriteTimeUtc(path, DateTime.UtcNow); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
     }
     private void Release(string path)
     {
@@ -47,7 +40,6 @@ public sealed class KitchenImageCache : IDisposable
         {
             if (!_leases.TryGetValue(path, out int count)) return;
             if (count == 1) _leases.Remove(path); else _leases[path] = count - 1;
-            Touch(path);
         }
     }
     public void Sweep(DateTime utcNow)
@@ -74,6 +66,19 @@ public sealed class KitchenImageCache : IDisposable
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
+    }
+    public void Invalidate()
+    {
+        lock (_gate)
+        {
+            if (!Directory.Exists(_directory)) return;
+            foreach (string path in Directory.EnumerateFiles(_directory))
+                if (OwnedName.IsMatch(Path.GetFileName(path)))
+                    try { File.SetLastWriteTimeUtc(path, DateTime.UnixEpoch); }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+        }
+        Sweep(DateTime.UtcNow);
     }
     public void Dispose()
     {

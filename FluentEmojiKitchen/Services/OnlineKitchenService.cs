@@ -18,23 +18,39 @@ public sealed class OnlineKitchenService : IKitchenService, IDisposable
     private readonly object _gate = new();
     private IDisposable? _preview;
     private bool _disposed;
+    private string _epoch;
     private IKitchenCompatibility? _compatibility;
     private readonly IKitchenImageClipboard? _clipboard;
     public OnlineKitchenService(string directory, IKitchenImageClipboard? clipboard = null)
-    { _directory = directory; _clipboard = clipboard; _cache = new KitchenImageCache(directory); }
+    {
+        _directory = directory; _clipboard = clipboard; _cache = new KitchenImageCache(directory);
+        string marker = Path.Combine(directory, "generation.txt");
+        _epoch = File.Exists(marker) ? File.ReadAllText(marker).Trim() : "initial";
+    }
+    public void InvalidateCache()
+    {
+        lock (_gate)
+        {
+            _preview?.Dispose(); _preview = null;
+            Directory.CreateDirectory(_directory);
+            _epoch = Guid.NewGuid().ToString("N");
+            CacheFiles.WriteText(Path.Combine(_directory, "generation.txt"), _epoch);
+            _cache.Invalidate();
+        }
+    }
     public void Initialize(IKitchenCompatibility compatibility) => _compatibility = compatibility;
     public async Task<KitchenResult> CreateAsync(EmojiModel left, EmojiModel right, int size, CancellationToken cancellationToken)
     {
         var urls = _compatibility?.GetLatestUrls(left, right) ?? Array.Empty<string>();
         if (urls.Count == 0) return new(null, "No current image is available for this combination.");
         string url = urls[0]; // Stable choice if upstream marks multiple images latest. All remain in the index.
-        string filename = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(url))) + ".png";
+        string filename = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(url + "|" + _epoch))) + ".png";
         string path = Path.Combine(_directory, filename);
         using var downloadLease = _cache.Acquire(path);
         await Task.Run(async () =>
         {
             Directory.CreateDirectory(_directory);
-            if (!ValidPng(path))
+            if (CachePolicy.ImageExpired(path) || !ValidPng(path))
             {
                 await DownloadHelper.DownloadFileAsync(url, path, cancellationToken: cancellationToken).ConfigureAwait(false);
                 if (!ValidPng(path))

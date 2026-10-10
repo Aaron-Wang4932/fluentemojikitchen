@@ -8,7 +8,11 @@ public sealed partial class TabBar : UserControl
 {
     public event Action<PanelTab>? TabRequested;
     public event Action? CloseRequested;
+    public event Action? SettingsRequested;
+    public void SetSettingsEnabled(bool value) => SettingsButton.IsEnabled = value;
+    private void OnSettingsClick(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke();
     public TabBar() => InitializeComponent();
+    public void ShowSettings() => EmojiTabButton.IsChecked = KitchenTabButton.IsChecked = false;
     public void ShowTab(PanelTab tab)
     {
         EmojiTabButton.IsChecked = tab == PanelTab.Emoji;

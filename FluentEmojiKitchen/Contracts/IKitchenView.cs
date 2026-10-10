@@ -13,6 +13,7 @@ public interface IKitchenView
     event Action<string>? SearchChanged;
     event Action<int>? SizeChangedRequested;
     event Action? CopyRequested;
+    event Action? CopyURLRequested;
     void SetSections(IEnumerable<EmojiSection> sections);
     void ShowSearchResults(IReadOnlyList<EmojiItem> results, bool searching);
     void Render(KitchenViewState state);

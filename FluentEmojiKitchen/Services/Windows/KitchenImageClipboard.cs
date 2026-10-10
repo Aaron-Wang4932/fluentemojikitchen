@@ -18,7 +18,7 @@ public sealed class KitchenImageClipboard : IKitchenImageClipboard
     public async Task CopyAsync(Uri source, int pixelSize, CancellationToken cancellationToken)
     {
         if (!source.IsFile) throw new ArgumentException("A cached image file is required.", nameof(source));
-        if (pixelSize is not (48 or 128 or 256 or 512)) throw new ArgumentOutOfRangeException(nameof(pixelSize));
+        if (pixelSize is not (48 or 128 or 256 or 512 or 96)) throw new ArgumentOutOfRangeException(nameof(pixelSize));
         cancellationToken.ThrowIfCancellationRequested();
         var file = await StorageFile.GetFileFromPathAsync(source.LocalPath);
         using var input = await file.OpenReadAsync();

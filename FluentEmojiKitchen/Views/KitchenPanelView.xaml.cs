@@ -18,6 +18,7 @@ public sealed partial class KitchenPanelView : UserControl, IKitchenView
     public event Action<string>? SearchChanged;
     public event Action<int>? SizeChangedRequested;
     public event Action? CopyRequested;
+    public event Action? CopyURLRequested;
     private Uri? _displayedImage;
     private BitmapImage? _bitmap;
     private bool _imageLoading;
@@ -48,6 +49,7 @@ public sealed partial class KitchenPanelView : UserControl, IKitchenView
         KitchenHintText.Visibility = !picking && !result ? Visibility.Visible : Visibility.Collapsed;
         KitchenResultLoadingRing.IsActive = state.IsLoading || _imageLoading;
         KitchenCopyButton.IsEnabled = !state.IsLoading && !state.IsCopying && state.Result is { CanCopy: true, ImageUri: not null };
+        KitchenURLCopyButton.IsEnabled = !state.IsLoading && !state.IsCopying && state.Result is { CanCopy: true, ImageUri: not null };
         ResultMessage.Text = state.Result?.Message ?? "";
         // Preview dimensions belong exclusively to KitchenImageFrame in XAML.
         // Decode the original image; export size must not reduce preview quality.
@@ -93,4 +95,9 @@ public sealed partial class KitchenPanelView : UserControl, IKitchenView
             SizeChangedRequested?.Invoke(size);
     }
     private void OnKitchenCopyClick(object sender, RoutedEventArgs e) => CopyRequested?.Invoke();
+
+    private void OnKitchenCopyURLClick(object sender, RoutedEventArgs e)
+    {
+        CopyURLRequested?.Invoke();
+    }
 }

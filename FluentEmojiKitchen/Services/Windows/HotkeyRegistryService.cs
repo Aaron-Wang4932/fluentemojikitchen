@@ -103,7 +103,7 @@ namespace FluentEmojiKitchen.Services.Windows
 
         private List<string> GetImSubkeyPaths()
         {
-            if (File.Exists(CacheFilePath))
+            if (!CachePolicy.MonthlyExpired(CacheFilePath))
                 return File.ReadAllLines(CacheFilePath).ToList();
 
             using var root = Registry.LocalMachine.OpenSubKey(RootPath, writable: false);
@@ -114,6 +114,8 @@ namespace FluentEmojiKitchen.Services.Windows
 
             return paths;
         }
+
+        public void RebuildPathCache() { InvalidateCache(); _ = GetImSubkeyPaths(); }
 
         public static void InvalidateCache()
         {

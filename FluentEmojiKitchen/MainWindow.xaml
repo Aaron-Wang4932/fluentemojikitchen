@@ -15,6 +15,10 @@
             <views:EmojiPanelView x:Name="EmojiPanel" />
             <views:KitchenPanelView x:Name="KitchenPanel" Visibility="Collapsed" />
             <controls:LoadingOverlay x:Name="StartupOverlay" />
+            <Grid x:Name="SettingsBlocker" Visibility="Collapsed" Background="Transparent" TabFocusNavigation="Cycle">
+                <controls:SettingsPanel x:Name="Settings" MaxWidth="320"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Top" Margin="8" />
+            </Grid>
         </Grid>
     </Grid>
 </Window>

@@ -14,12 +14,11 @@ public sealed class KitchenMetadataCache
     private const string Source = "https://raw.githubusercontent.com/xsalazar/emoji-kitchen-backend/refs/heads/main/app/metadata.json";
     private readonly string _directory;
     private readonly KitchenMetadataParser _parser;
-    private static readonly TimeSpan MaxAge = TimeSpan.FromDays(7);
     public KitchenMetadataCache(string directory, KitchenMetadataParser parser)
     { _directory = directory; _parser = parser; }
 
     // Call from the startup worker. Percent is local to this phase (0..100).
-    public async Task<KitchenIndex> LoadAsync(IProgress<StartupProgress>? progress, CancellationToken token)
+    public async Task<KitchenIndex> LoadAsync(IProgress<StartupProgress>? progress, CancellationToken token, bool force = false)
     {
         Directory.CreateDirectory(_directory);
         string raw = Path.Combine(_directory, "kitchen-metadata.json");
@@ -28,13 +27,13 @@ public sealed class KitchenMetadataCache
         progress?.Report(new("Reading Kitchen cache...", 0));
         try
         {
-            if (File.Exists(compact))
+            if (!force && File.Exists(compact))
             {
                 using var file = File.OpenRead(compact);
                 using var gzip = new GZipStream(file, CompressionMode.Decompress);
                 cached = JsonSerializer.Deserialize(gzip, KitchenCacheJsonContext.Default.KitchenIndex);
                 Validate(cached);
-                if (DateTime.UtcNow - cached!.SourceUtc < MaxAge)
+                if (!CachePolicy.MonthlyExpired(cached!.SourceUtc, DateTime.UtcNow))
                 {
                     progress?.Report(new("Kitchen cache ready", 100));
                     return cached;
@@ -48,7 +47,7 @@ public sealed class KitchenMetadataCache
         try
         {
             KitchenIndex? result = null;
-            if (File.Exists(raw) && DateTime.UtcNow - File.GetLastWriteTimeUtc(raw) < MaxAge)
+            if (!force && !CachePolicy.MonthlyExpired(raw))
             {
                 try { result = Parse(raw, progress, token); }
                 catch (Exception ex) when (ex is JsonException or InvalidDataException)
@@ -68,7 +67,7 @@ public sealed class KitchenMetadataCache
             progress?.Report(new("Kitchen cache ready", 100));
             return result;
         }
-        catch (Exception ex) when (!token.IsCancellationRequested &&
+        catch (Exception ex) when (!force && !token.IsCancellationRequested &&
             ex is System.Net.Http.HttpRequestException or IOException or JsonException or InvalidDataException or OperationCanceledException)
         {
             if (cached is not null)

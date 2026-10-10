@@ -20,8 +20,39 @@ public sealed class WindowLayoutService : IWindowLayout
     }
     public void FinishLoading()
     {
-        if (_window.AppWindow.Presenter is OverlappedPresenter presenter) presenter.IsResizable = true;
-        _window.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(_window.AppWindow.Size.Width, _options.WindowHeight));
+        if (_window.AppWindow.Presenter is OverlappedPresenter presenter)
+            presenter.IsResizable = true;
+
+        if (_window.Content is not FrameworkElement root ||
+            root.XamlRoot is null)
+            return;
+
+        double scale = root.XamlRoot.RasterizationScale;
+        var appWindow = _window.AppWindow;
+
+        int chromeHeight = Math.Max(
+            0,
+            appWindow.Size.Height - (int)Math.Round(root.ActualHeight * scale));
+
+        var workArea = DisplayArea.GetFromWindowId(
+            appWindow.Id,
+            DisplayAreaFallback.Nearest).WorkArea;
+
+        int height = Math.Min(
+            (int)Math.Ceiling(_options.WindowHeight * scale) + chromeHeight,
+            workArea.Height);
+
+        appWindow.Resize(new global::Windows.Graphics.SizeInt32(
+            appWindow.Size.Width, height));
+
+        // Keep the enlarged window within the monitor vertically.
+        int y = Math.Clamp(
+            appWindow.Position.Y,
+            workArea.Y,
+            workArea.Y + workArea.Height - height);
+
+        appWindow.Move(new global::Windows.Graphics.PointInt32(
+            appWindow.Position.X, y));
     }
     private int TargetColumns => _options.TargetColumns;
     private const double EmojiItemWidth = 48;
@@ -31,6 +62,7 @@ public sealed class WindowLayoutService : IWindowLayout
     private const double ColumnFitBuffer = 2;
 
     private bool _hasAutoFitColumns;
+    public void ResetFit() => _hasAutoFitColumns = false;
 
     private double TargetAvailableWidth =>
         TargetColumns * EmojiItemWidth + (TargetColumns - 1) * EmojiColumnSpacing + ColumnFitBuffer;
@@ -67,13 +99,23 @@ public sealed class WindowLayoutService : IWindowLayout
 
                 int newFramePx = (int)Math.Round(newContentWidthDip * scale) + chromePx;
 
+                var display = DisplayArea.GetFromWindowId(_window.AppWindow.Id, DisplayAreaFallback.Nearest);
+                if (newFramePx > display.WorkArea.Width)
+                {
+                    int fit = (int)Math.Floor((TargetAvailableWidth - (newFramePx - display.WorkArea.Width) / scale + EmojiColumnSpacing - ColumnFitBuffer) / (EmojiItemWidth + EmojiColumnSpacing));
+                    if (fit >= AppOptions.MinimumColumns && fit < _options.TargetColumns)
+                    { _options.TargetColumns = fit; continue; }
+                }
+                // Remove the old width clamp before applying a different column count.
+                if (_window.AppWindow.Presenter is OverlappedPresenter previous)
+                { previous.PreferredMinimumWidth = 0; previous.PreferredMaximumWidth = 0; }
                 _window.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(newFramePx, _window.AppWindow.Size.Height));
 
                 if (_window.AppWindow.Presenter is OverlappedPresenter presenter)
                 {
                     presenter.PreferredMinimumWidth = newFramePx;
                     presenter.PreferredMaximumWidth = newFramePx;
-                    presenter.PreferredMinimumHeight = newFramePx;
+                    presenter.PreferredMinimumHeight = Math.Min(newFramePx, _options.WindowHeight);
                 }
 
                 System.Diagnostics.Debug.WriteLine(
@@ -85,7 +127,7 @@ public sealed class WindowLayoutService : IWindowLayout
             }
         }
 
-        System.Diagnostics.Debug.WriteLine("AutoFitWindowToColumns: gave up — section 0 never realized.");
+        throw new InvalidOperationException("Could not measure the emoji grid for column resizing.");
     }
 
 }

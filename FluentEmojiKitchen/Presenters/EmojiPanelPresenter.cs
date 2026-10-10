@@ -31,8 +31,12 @@ public sealed class EmojiPanelPresenter : IDisposable
 
     public void Initialize(IEmojiCatalog catalog)
     {
+        if (_selected is not null) _selected.IsSelected = false;
+        _selected = null;
         _catalog = catalog;
         _byCharacter = catalog.Emojis.ToDictionary(e => e.Character);
+        // Detach once before rebuilding: avoid thousands of incremental layout updates.
+        _view.SetSections(Array.Empty<EmojiSection>());
         _sections.Clear();
         var recent = BuildRecentSection();
         if (recent is not null) _sections.Add(recent);

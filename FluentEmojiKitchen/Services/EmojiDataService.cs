@@ -31,17 +31,19 @@ namespace FluentEmojiKitchen.Services
 
         // A raw external source that gets folded into ParsedEmojiJSON.
         // NOTE TO SELF TO ADD A NEW SOURCE: add an entry and its merge step inside BuildParsedEmojiJSONAsync.
-        private sealed record CachedSource(string Url, string LocalPath, TimeSpan MaxAge);
+        private sealed record CachedSource(string Url, string LocalPath);
 
         private static readonly List<CachedSource> Sources = new()
         {
             // List of all emojis
-            new CachedSource(RawEmojiFileURL, RawEmojiFile, TimeSpan.FromDays(7)),
+            new CachedSource(RawEmojiFileURL, RawEmojiFile),
             // List of all emoji annotations
-            new CachedSource(CLDRAnnotationsURL, CLDRAnnotations, TimeSpan.FromDays(7)),
+            new CachedSource(CLDRAnnotationsURL, CLDRAnnotations),
             // List of all supported emoji kitchen (fusion) emojis + some more search keywords
-            new CachedSource(SupportedEmojiAndKeywordsURL, SupportedEmojiAndKeywordsFile, TimeSpan.FromDays(7))
+            new CachedSource(SupportedEmojiAndKeywordsURL, SupportedEmojiAndKeywordsFile)
         };
+
+        public static bool NeedsRefresh() => CachePolicy.MonthlyExpired(ParsedEmojiJSON) || Sources.Any(s => CachePolicy.MonthlyExpired(s.LocalPath));
 
         public List<string> RecentCharacters { get; private set; } = [];
         IReadOnlyList<string> IEmojiCatalog.RecentCharacters => RecentCharacters;
@@ -57,11 +59,11 @@ namespace FluentEmojiKitchen.Services
         }
 
         // Factory constructor method.
-        public static async Task<EmojiDataService> CreateAsync(IProgress<StartupProgress>? progress = null, CancellationToken cancellationToken = default)
+        public static async Task<EmojiDataService> CreateAsync(IProgress<StartupProgress>? progress = null, CancellationToken cancellationToken = default, bool force = false)
         {
             Directory.CreateDirectory(AppDataFolder);
 
-            // Refresh every raw source that's missing or older than its own MaxAge.
+            // Refresh missing sources and sources older than one calendar month.
             bool anySourceRefreshed = false;
             for (int i = 0; i < Sources.Count; i++)
             {
@@ -70,7 +72,7 @@ namespace FluentEmojiKitchen.Services
                 double start = i * 20;
                 progress?.Report(new($"Checking {Path.GetFileName(source.LocalPath)}...", start));
                 if (await EnsureFreshAsync(source, p => progress?.Report(new(
-                    $"Downloading {Path.GetFileName(source.LocalPath)}: {p.Description}", start + 20 * p.Fraction)), cancellationToken))
+                    $"Downloading {Path.GetFileName(source.LocalPath)}: {p.Description}", start + 20 * p.Fraction)), cancellationToken, force))
                     anySourceRefreshed = true;
             }
             cancellationToken.ThrowIfCancellationRequested();
@@ -79,7 +81,7 @@ namespace FluentEmojiKitchen.Services
 
             // ParsedEmojiJSON already has everything (codepoints, names, groups, keywords) from the last time the app was run
             // Only rebuild when source changed or if JSON does not exist.
-            if (!File.Exists(ParsedEmojiJSON) || anySourceRefreshed)
+            if (force || CachePolicy.MonthlyExpired(ParsedEmojiJSON) || anySourceRefreshed)
                 await BuildParsedEmojiJSONAsync();
 
             progress?.Report(new("Reading emoji catalogue...", 85));
@@ -95,16 +97,16 @@ namespace FluentEmojiKitchen.Services
         }
 
         // Downloads the source if it's missing or stale. Returns whether it downloaded.
-        private static async Task<bool> EnsureFreshAsync(CachedSource source, Action<DownloadProgress>? progress, CancellationToken token)
+        private static async Task<bool> EnsureFreshAsync(CachedSource source, Action<DownloadProgress>? progress, CancellationToken token, bool force)
         {
-            if (!File.Exists(source.LocalPath) || (DateTime.Now - File.GetLastWriteTime(source.LocalPath)) > source.MaxAge)
+            if (force || CachePolicy.MonthlyExpired(source.LocalPath))
             {
                 try
                 {
                     await DownloadHelper.DownloadFileAsync(source.Url, source.LocalPath, progress, token);
                     return true;
                 }
-                catch (Exception ex) when (!token.IsCancellationRequested && File.Exists(source.LocalPath) &&
+                catch (Exception ex) when (!force && !token.IsCancellationRequested && File.Exists(source.LocalPath) &&
                     ex is System.Net.Http.HttpRequestException or IOException or OperationCanceledException)
                 {
                     System.Diagnostics.Debug.WriteLine($"Using cached {source.LocalPath}: {ex.Message}");

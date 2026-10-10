@@ -1,12 +1,15 @@
+using FluentEmojiKitchen.Contracts;
+using FluentEmojiKitchen.Models;
+using FluentEmojiKitchen.Presentation;
+using FluentEmojiKitchen.Services;
+using Microsoft.UI;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using FluentEmojiKitchen.Contracts;
-using FluentEmojiKitchen.Models;
-using FluentEmojiKitchen.Presentation;
-using FluentEmojiKitchen.Services;
+using Windows.ApplicationModel.DataTransfer;
+using static Vanara.PInvoke.Kernel32;
 
 namespace FluentEmojiKitchen.Presenters;
 
@@ -23,11 +26,12 @@ public sealed class KitchenPresenter : IDisposable
     private KitchenSlot _active;
     private EmojiItem? _left;
     private EmojiItem? _right;
-    private int _size = 48;
+    private int _size = 96;
     private bool _loading;
     private bool _disposed, _copying;
     private readonly CancellationTokenSource _lifetime = new();
     private KitchenResult? _result;
+    private CancellationTokenSource? _copyRequest;
     private CancellationTokenSource? _request;
 
     public KitchenPresenter(IKitchenView view, EmojiQueryService queries, IKitchenService service)
@@ -41,6 +45,7 @@ public sealed class KitchenPresenter : IDisposable
         _view.SearchChanged += OnSearchChanged;
         _view.SizeChangedRequested += OnSizeChanged;
         _view.CopyRequested += OnCopyRequested;
+        _view.CopyURLRequested += OnCopyURLRequested;
     }
 
     public void Initialize(IEmojiCatalog catalog, IKitchenCompatibility compatibility)
@@ -54,6 +59,14 @@ public sealed class KitchenPresenter : IDisposable
         Render();
     }
 
+    public void PrepareReload()
+    {
+        _request?.Cancel(); _request = null;
+        _copyRequest?.Cancel();
+        _active = KitchenSlot.None; _left = null; _right = null;
+        _result = null; _loading = false;
+        Render();
+    }
     public void ResetSearch() => _view.ResetSearch();
 
     private void OnSlotTapped(KitchenSlot slot)
@@ -91,7 +104,7 @@ public sealed class KitchenPresenter : IDisposable
 
     private void OnSizeChanged(int size)
     {
-        if (size is not (48 or 128 or 256 or 512)) return;
+        if (size is not (48 or 128 or 256 or 512 or 96)) return;
         _size = size;
         if (_result is not null) _result = _result with { CopySize = size, Message = null };
         Render(); // No download, source replacement, preview resize, or request cancellation.
@@ -163,17 +176,19 @@ public sealed class KitchenPresenter : IDisposable
     private async void OnCopyRequested()
     {
         if (_copying || _disposed || _result is not { CanCopy: true, ImageUri: not null }) return;
+        using var copyRequest = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _copyRequest = copyRequest;
         var displayed = _result;
         var snapshot = displayed with { CopySize = _size };
         _copying = true;
         Render();
         try
         {
-            await _service.CopyAsync(snapshot, _lifetime.Token);
+            await _service.CopyAsync(snapshot, copyRequest.Token);
             if (!_disposed && ReferenceEquals(_result, displayed))
                 _result = displayed with { Message = $"Copied {snapshot.CopySize} × {snapshot.CopySize} PNG." };
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (copyRequest.IsCancellationRequested) { }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine(ex);
@@ -182,9 +197,36 @@ public sealed class KitchenPresenter : IDisposable
         }
         finally
         {
+            _copyRequest = null;
             _copying = false;
             if (!_disposed) Render();
         }
+    }
+
+    private void OnCopyURLRequested()
+    {
+        if (_copying || _disposed ||
+            _result is not { CanCopy: true, ImageUri: not null } ||
+            _left is null || _right is null || _compatibility is null)
+            return;
+
+        var urls = _compatibility.GetLatestUrls(_left.Model, _right.Model);
+        if (urls.Count == 0) return;
+
+        string apiUrl =
+            $"https://wsrv.nl/?url={Uri.EscapeDataString(urls[0])}" +
+            $"&w={_size}&h={_size}&output=png";
+
+        var dataPackage = new DataPackage
+        {
+            RequestedOperation = DataPackageOperation.Copy
+        };
+
+        dataPackage.SetText(apiUrl);
+        Clipboard.SetContent(dataPackage);
+
+        _result = _result with { Message = $"Copied {_size} × {_size} image URL." };
+        Render();
     }
 
     private void Render() => _view.Render(new KitchenViewState(_active, _left, _right, _loading, _result, _copying));
@@ -200,5 +242,6 @@ public sealed class KitchenPresenter : IDisposable
         _view.SearchChanged -= OnSearchChanged;
         _view.SizeChangedRequested -= OnSizeChanged;
         _view.CopyRequested -= OnCopyRequested;
+        _view.CopyURLRequested -= OnCopyURLRequested;
     }
 }
